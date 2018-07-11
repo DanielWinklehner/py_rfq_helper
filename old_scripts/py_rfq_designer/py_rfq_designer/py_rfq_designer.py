@@ -8,6 +8,7 @@ from scipy.optimize import root
 # import scipy.constants as const
 # import numpy as np
 # import platform
+import matplotlib.pyplot as plt
 import gc
 
 # import time
@@ -154,7 +155,7 @@ class PyRFQCell(object):
         self._next_cell = next_cell
 
     def calculate_profile(self, cell_no, vane_type, fudge=False):
-
+        print("cell_no: " + str(cell_no))
         assert vane_type in ["xp", "xm", "yp", "ym"], "Did not understand vane type {}".format(vane_type)
 
         if self._type == "STA":
@@ -208,6 +209,7 @@ class PyRFQCell(object):
                         next_is_rms = (nc.cell_type == "RMS")
 
             self._profile_itp = interp1d(z, a, kind='cubic')
+
             return 0
 
         elif self._type == "TCS":
@@ -277,7 +279,7 @@ class PyRFQCell(object):
             else:
                 vane[idx] = _vane
 
-            self._profile_itp = interp1d(z, vane)
+            self._profile_itp = interp1d(z, vane, bounds_error=False, fill_value=0)
 
             return 0
 
@@ -348,6 +350,13 @@ class PyRFQCell(object):
         return 0
 
     def profile(self, z):
+
+        # plt.figure()
+
+        # domain = np.linspace(0.01828769716079613, 0.10972618296477678, 10)
+
+        # plt.plot(domain, self._profile_itp(domain))
+        # plt.show()
 
         return self._profile_itp(z)
 
@@ -1267,6 +1276,7 @@ class PyRFQ(object):
         dp0_space = bempp.api.function_space(self._full_mesh, "DP", 0)
         slp = bempp.api.operators.boundary.laplace.single_layer(dp0_space, dp0_space, dp0_space)
 
+
         domain_mapping = {}
         for vane in self._vanes:
             domain_mapping[vane.domain_idx] = vane.voltage
@@ -1277,6 +1287,7 @@ class PyRFQ(object):
             result[0] = domain_mapping[domain_index]
 
         dirichlet_fun = bempp.api.GridFunction(dp0_space, fun=f)
+
 
         if self._debug:
             dirichlet_fun.plot()
@@ -1289,6 +1300,7 @@ class PyRFQ(object):
 
         self._variables_bempp["solution"] = sol
         self._variables_bempp["f_space"] = dp0_space
+
         # self._variables_bempp["operator"] = slp
         # self._variables_bempp["grid_fun"] = dirichlet_fun
 
@@ -1326,8 +1338,7 @@ class PyRFQ(object):
                                          voltage=-self._voltage,
                                          debug=self._debug))
 
-        p = Pool(4)
-        self._vanes = p.map(self.generate_vanes_worker, self._vanes)
+        self._vanes = list(map(self.generate_vanes_worker, self._vanes))
 
         return 0
 
@@ -1519,44 +1530,50 @@ End Sub
 if __name__ == "__main__":
     myrfq = PyRFQ(voltage=22000.0, debug=True)
 
+
+    myrfq.append_cell(cell_type="STA",
+                      aperture=0.05,
+                      modulation=1.0,
+                      length=0.0)
+
     # Load the base RFQ design from the parmteq file
     if myrfq.add_cells_from_file() == 1:
         exit()
 
-    myrfq.append_cell(cell_type="TCS",
-                      aperture=0.007147,
-                      modulation=1.6778,
-                      length=0.033840)
+    # myrfq.append_cell(cell_type="TCS",
+    #                   aperture=0.007147,
+    #                   modulation=1.6778,
+    #                   length=0.033840)
 
-    myrfq.append_cell(cell_type="DCS",
-                      aperture=0.0095691183,
-                      modulation=1.0,
-                      length=0.1)
+    # myrfq.append_cell(cell_type="DCS",
+    #                   aperture=0.0095691183,
+    #                   modulation=1.0,
+    #                   length=0.1)
 
-    myrfq.append_cell(cell_type="STA",
-                      aperture=0.0095691183,
-                      modulation=1.0,
-                      length=0.0)
+    # myrfq.append_cell(cell_type="STA",
+    #                   aperture=0.0095691183,
+    #                   modulation=1.0,
+    #                   length=0.0)
 
-    myrfq.append_cell(cell_type="RMS",
-                      aperture=0.010944,
-                      modulation=1.0,
-                      length=0.018339)
+    # myrfq.append_cell(cell_type="RMS",
+    #                   aperture=0.010944,
+    #                   modulation=1.0,
+    #                   length=0.018339)
 
-    myrfq.append_cell(cell_type="RMS",
-                      aperture=0.016344,
-                      modulation=1.0,
-                      length=0.018339)
+    # myrfq.append_cell(cell_type="RMS",
+    #                   aperture=0.016344,
+    #                   modulation=1.0,
+    #                   length=0.018339)
 
-    myrfq.append_cell(cell_type="RMS",
-                      aperture=0.041051,
-                      modulation=1.0,
-                      length=0.018339)
+    # myrfq.append_cell(cell_type="RMS",
+    #                   aperture=0.041051,
+    #                   modulation=1.0,
+    #                   length=0.018339)
 
-    myrfq.append_cell(cell_type="RMS",
-                      aperture=0.150000,
-                      modulation=1.0,
-                      length=0.018339)
+    # myrfq.append_cell(cell_type="RMS",
+    #                   aperture=0.150000,
+    #                   modulation=1.0,
+    #                   length=0.018339)
 
     # myrfq.add_cells_from_file(filename="/mnt/c/Users/Daniel Winklehner/Dropbox (MIT)/Code/Python/"
     #                                    "py_rfq_designer/py_rfq_designer/Parm_50_63cells.dat")
@@ -1621,8 +1638,8 @@ if __name__ == "__main__":
     myrfq.generate_vanes()
     print("Generating vanes took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
-    myrfq.write_inventor_macro()
-    exit()
+    #myrfq.write_inventor_macro()
+    #exit()
 
     print("Generating full mesh for BEM++")
     ts = time.time()
@@ -1670,5 +1687,5 @@ if __name__ == "__main__":
     #
     # print("Tracking took {:.4f} s".format(time.time() - ts))
 
-    # myrfq.plot_combo(xypos=myres[0], xyscale=1.0)
-    # myrfq.plot_vane_profile()
+    #myrfq.plot_combo(xypos=myres[0], xyscale=1.0)
+    #myrfq.plot_vane_profile()
