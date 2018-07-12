@@ -384,6 +384,7 @@ class PyRFQVane(object):
                              "r_tip": 0.005,  # Radius of curvature of vane tip (m)
                              "h_block": 0.001,  # height of block sitting atop the curvature (m)
                              "symmetry": False,
+                             "mirror": False,
                              "domain_idx": None,
                              "gmsh_str": None}
 
@@ -433,12 +434,19 @@ class PyRFQVane(object):
     def set_domain_index(self, idx):
         self._mesh_params["domain_idx"] = idx
 
-    def generate_gmsh_str(self, dx=None, h=None, symmetry=None):
+    def generate_gmsh_str(self, dx=None, h=None, symmetry=None, mirror=None):
 
         if symmetry is not None:
             self._mesh_params["symmetry"] = symmetry
         else:
             symmetry = self._mesh_params["symmetry"]
+
+        if mirror is not None:
+            self._mesh_params["mirror"] = mirror
+        else:
+            mirror = self._mesh_params["mirror"]
+
+        assert not (symmetry is True and mirror is True), "Cannot have mirroring and symmetry at the same time!"
 
         if dx is not None:
             self._mesh_params["dx"] = dx
@@ -633,22 +641,46 @@ EndFor
         if not symmetry:
             # Mirror the half-vane on yz plane
             gmsh_str += "new_surfs[] = Symmetry {{1, 0, 0, 0}} " \
-                        "{{Duplicata{{Surface {{{}:{}}};}}}};\n".format(1, surf_count)
+                        "{{Duplicata{{Surface {{1:{}}};}}}};\n".format(surf_count)
 
-            # Add physical surface to identify this vane in gmsh
-            gmsh_str += "Physical Surface({}) = {{1:{}, -new_surfs[]}};\n\n".format(self._mesh_params["domain_idx"],
-                                                                                    surf_count)
+            if mirror:
+                # Mirror the resulting vane on the xz plane (need to do it separately for both
+                # shells to get surface normal right
+                gmsh_str += "mir_vane1[] = Symmetry {{0, 1, 0, 0}} " \
+                            "{{Duplicata{{Surface {{1:{}}};}}}};\n".format(surf_count)
+                gmsh_str += "mir_vane2[] = Symmetry {{0, 1, 0, 0}} " \
+                            "{{Duplicata{{Surface {{new_surfs[]}};}}}};\n".format(surf_count)
 
-            # Rotate if necessary
-            if self.vane_type == "xp":
-                gmsh_str += "Rotate {{{{0, 0, 1}}, {{0, 0, 0}}, {}}} " \
-                            "{{Surface {{1:{}, new_surfs[]}};}}\n".format(-0.5 * np.pi, surf_count)
-            elif self.vane_type == "xm":
-                gmsh_str += "Rotate {{{{0, 0, 1}}, {{0, 0, 0}}, {}}} " \
-                            "{{Surface {{1:{}, new_surfs[]}};}}\n".format(0.5 * np.pi, surf_count)
-            elif self.vane_type == "ym":
-                gmsh_str += "Rotate {{{{0, 0, 1}}, {{0, 0, 0}}, {}}} " \
-                            "{{Surface {{1:{}, new_surfs[]}};}}\n".format(np.pi, surf_count)
+                # Add physical surface to identify this vane in gmsh
+                gmsh_str += "Physical Surface({}) = {{1:{}, -new_surfs[], -mir_vane1[], mir_vane2[]}};\n\n".format(
+                    self._mesh_params["domain_idx"], surf_count)
+
+                # Rotate if necessary
+                if self.vane_type == "xp":
+                    gmsh_str += "Rotate {{{{0, 0, 1}}, {{0, 0, 0}}, {}}} " \
+                                "{{Surface {{1:{}, new_surfs[], mir_vane1[], mir_vane2[]}};}}\n".format(-0.5 * np.pi, surf_count)
+                elif self.vane_type == "xm":
+                    gmsh_str += "Rotate {{{{0, 0, 1}}, {{0, 0, 0}}, {}}} " \
+                                "{{Surface {{1:{}, new_surfs[], mir_vane1[], mir_vane2[]}};}}\n".format(0.5 * np.pi, surf_count)
+                elif self.vane_type == "ym":
+                    gmsh_str += "Rotate {{{{0, 0, 1}}, {{0, 0, 0}}, {}}} " \
+                                "{{Surface {{1:{}, new_surfs[], mir_vane1[], mir_vane2[]};}}\n".format(np.pi, surf_count)
+
+            else:
+                # Add physical surface to identify this vane in gmsh (unmirrored)
+                gmsh_str += "Physical Surface({}) = {{1:{}, -new_surfs[]}};\n\n".format(self._mesh_params["domain_idx"],
+                                                                                        surf_count)
+
+                # Rotate if necessary
+                if self.vane_type == "xp":
+                    gmsh_str += "Rotate {{{{0, 0, 1}}, {{0, 0, 0}}, {}}} " \
+                                "{{Surface {{1:{}, new_surfs[]}};}}\n".format(-0.5 * np.pi, surf_count)
+                elif self.vane_type == "xm":
+                    gmsh_str += "Rotate {{{{0, 0, 1}}, {{0, 0, 0}}, {}}} " \
+                                "{{Surface {{1:{}, new_surfs[]}};}}\n".format(0.5 * np.pi, surf_count)
+                elif self.vane_type == "ym":
+                    gmsh_str += "Rotate {{{{0, 0, 1}}, {{0, 0, 0}}, {}}} " \
+                                "{{Surface {{1:{}, new_surfs[]}};}}\n".format(np.pi, surf_count)
 
         else:
             # Add physical surface to identify this vane in gmsh
@@ -680,6 +712,8 @@ EndFor
 
             # Add physical surface to identify the Neumann BC in gmsh
             gmsh_str += "Physical Surface({}) = {{{}}};\n\n".format(0, surf_count)
+
+            # TODO: still need to mirror this on x=y plane for second vane!
 
         with open("test_{}.geo".format(self._type), "w") as outfile:
             outfile.write(gmsh_str)
@@ -970,7 +1004,6 @@ class PyRFQ(object):
             print("Loading cells from Parmteqm v{} output file...".format(version))
 
             # Find begin of cell information
-            readdata = False
             for line in infile:
                 if "Cell" in line and "V" in line:
                     break
@@ -987,10 +1020,9 @@ class PyRFQ(object):
 
                 if len(items) == 10 and cell_no == "0":
                     # This is the start cell, only there to provide a starting aperture
-                    # We use this only if there are no previous cells in the pyRFQ
-                    # Else we ignore it...
                     if len(self._cells) == 0:
-
+                        # We use this only if there are no previous cells in the pyRFQ
+                        # Else we ignore it...
                         self._cells.append(PyRFQCell(cell_type="STA",
                                                      aperture=params[6]*0.01,
                                                      modulation=params[7],
@@ -1276,7 +1308,6 @@ class PyRFQ(object):
         dp0_space = bempp.api.function_space(self._full_mesh, "DP", 0)
         slp = bempp.api.operators.boundary.laplace.single_layer(dp0_space, dp0_space, dp0_space)
 
-
         domain_mapping = {}
         for vane in self._vanes:
             domain_mapping[vane.domain_idx] = vane.voltage
@@ -1288,15 +1319,11 @@ class PyRFQ(object):
 
         dirichlet_fun = bempp.api.GridFunction(dp0_space, fun=f)
 
-
         if self._debug:
             dirichlet_fun.plot()
 
         # Solve
         sol, info = bempp.api.linalg.gmres(slp, dirichlet_fun, tol=1e-5, use_strong_form=True)
-
-        # with open('bempp_sol.pkl', 'wb') as output:
-        #     pickle.dump(sol, output, pickle.HIGHEST_PROTOCOL)
 
         self._variables_bempp["solution"] = sol
         self._variables_bempp["f_space"] = dp0_space
@@ -1327,18 +1354,23 @@ class PyRFQ(object):
 
         # There are four vanes (rods) in the RFQ
         # x = horizontal, y = vertical, with p, m denoting positive and negative axis directions
-        for vane_type in ["yp", "ym"]:
+        # for vane_type in ["yp", "ym"]:
+        for vane_type in ["yp"]:
             self._vanes.append(PyRFQVane(vane_type=vane_type,
                                          cells=self._cells,
                                          voltage=self._voltage,
                                          debug=self._debug))
-        for vane_type in ["xp", "xm"]:
+
+        # for vane_type in ["xp", "xm"]:
+        for vane_type in ["xp"]:
             self._vanes.append(PyRFQVane(vane_type=vane_type,
                                          cells=self._cells,
                                          voltage=-self._voltage,
                                          debug=self._debug))
 
-        self._vanes = list(map(self.generate_vanes_worker, self._vanes))
+        # Generate the two vanes in parallel:
+        p = Pool()
+        self._vanes = p.map(self.generate_vanes_worker, self._vanes)
 
         return 0
 
@@ -1346,7 +1378,10 @@ class PyRFQ(object):
     def generate_vanes_worker(vane):
 
         vane.calculate_profile(fudge=True)
-        vane.generate_gmsh_str(dx=0.002, h=0.002, symmetry=False)
+        vane.generate_gmsh_str(dx=0.005, h=0.005,  # TODO: all these params should be user-settable
+                               symmetry=False, mirror=True)
+        # vane.generate_gmsh_str(dx=0.002, h=0.002,  # TODO: all these params should be user-settable
+        #                        symmetry=False, mirror=True)
 
         return vane
 
@@ -1528,52 +1563,52 @@ End Sub
 
 
 if __name__ == "__main__":
+
     myrfq = PyRFQ(voltage=22000.0, debug=True)
 
-
-    myrfq.append_cell(cell_type="STA",
-                      aperture=0.05,
-                      modulation=1.0,
-                      length=0.0)
+    # myrfq.append_cell(cell_type="STA",
+    #                   aperture=0.15,
+    #                   modulation=1.0,
+    #                   length=0.0)
 
     # Load the base RFQ design from the parmteq file
     if myrfq.add_cells_from_file() == 1:
         exit()
 
-    # myrfq.append_cell(cell_type="TCS",
-    #                   aperture=0.007147,
-    #                   modulation=1.6778,
-    #                   length=0.033840)
+    myrfq.append_cell(cell_type="TCS",
+                      aperture=0.007147,
+                      modulation=1.6778,
+                      length=0.033840)
 
-    # myrfq.append_cell(cell_type="DCS",
-    #                   aperture=0.0095691183,
-    #                   modulation=1.0,
-    #                   length=0.1)
+    myrfq.append_cell(cell_type="DCS",
+                      aperture=0.0095691183,
+                      modulation=1.0,
+                      length=0.1)
 
-    # myrfq.append_cell(cell_type="STA",
-    #                   aperture=0.0095691183,
-    #                   modulation=1.0,
-    #                   length=0.0)
+    myrfq.append_cell(cell_type="STA",
+                      aperture=0.0095691183,
+                      modulation=1.0,
+                      length=0.0)
 
-    # myrfq.append_cell(cell_type="RMS",
-    #                   aperture=0.010944,
-    #                   modulation=1.0,
-    #                   length=0.018339)
+    myrfq.append_cell(cell_type="RMS",
+                      aperture=0.010944,
+                      modulation=1.0,
+                      length=0.018339)
 
-    # myrfq.append_cell(cell_type="RMS",
-    #                   aperture=0.016344,
-    #                   modulation=1.0,
-    #                   length=0.018339)
+    myrfq.append_cell(cell_type="RMS",
+                      aperture=0.016344,
+                      modulation=1.0,
+                      length=0.018339)
 
-    # myrfq.append_cell(cell_type="RMS",
-    #                   aperture=0.041051,
-    #                   modulation=1.0,
-    #                   length=0.018339)
+    myrfq.append_cell(cell_type="RMS",
+                      aperture=0.041051,
+                      modulation=1.0,
+                      length=0.018339)
 
-    # myrfq.append_cell(cell_type="RMS",
-    #                   aperture=0.150000,
-    #                   modulation=1.0,
-    #                   length=0.018339)
+    myrfq.append_cell(cell_type="RMS",
+                      aperture=0.150000,
+                      modulation=1.0,
+                      length=0.018339)
 
     # myrfq.add_cells_from_file(filename="/mnt/c/Users/Daniel Winklehner/Dropbox (MIT)/Code/Python/"
     #                                    "py_rfq_designer/py_rfq_designer/Parm_50_63cells.dat")
@@ -1638,8 +1673,8 @@ if __name__ == "__main__":
     myrfq.generate_vanes()
     print("Generating vanes took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
-    #myrfq.write_inventor_macro()
-    #exit()
+    # myrfq.plot_vane_profile()
+    # myrfq.write_inventor_macro()
 
     print("Generating full mesh for BEM++")
     ts = time.time()
@@ -1655,15 +1690,15 @@ if __name__ == "__main__":
 
     # input("Hit enter to continue...")
 
-    # print("Calculating E-Field")
-    # ts = time.time()
-    # myres = [0.001, 0.001, 0.003]
-    # limit = 5.0 * myres[0]
-    # myrfq.calculate_efield(limits=((-limit, limit), (-limit, limit), (0.0, 1.67)),
-    #                        res=myres,
-    #                        domain_decomp=(1, 1, 50),
-    #                        overlap=0)
-    # print("E-Field took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
+    print("Calculating E-Field")
+    ts = time.time()
+    myres = [0.001, 0.001, 0.003]
+    limit = 5.0 * myres[0]
+    myrfq.calculate_efield(limits=((-limit, limit), (-limit, limit), (0.0, 1.67)),
+                           res=myres,
+                           domain_decomp=(1, 1, 50),
+                           overlap=0)
+    print("E-Field took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
     # ts = time.time()
     # h2p = IonSpecies("H2_1+", 1.0)
@@ -1687,5 +1722,5 @@ if __name__ == "__main__":
     #
     # print("Tracking took {:.4f} s".format(time.time() - ts))
 
-    #myrfq.plot_combo(xypos=myres[0], xyscale=1.0)
-    #myrfq.plot_vane_profile()
+    myrfq.plot_combo(xypos=myres[0], xyscale=1.0)
+    # myrfq.plot_vane_profile()
