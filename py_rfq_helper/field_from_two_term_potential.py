@@ -385,7 +385,7 @@ class FieldGenerator(object):
 
     def load_parameters_from_file(self, filename=None):
         """
-        Load the cell parameters from a dat file.
+        Load the cell parameters.
         :param filename:
         :return:
         """
@@ -398,6 +398,13 @@ class FieldGenerator(object):
             print("No filename specified for parameter file. Closing.")
             exit(1)
 
+        with open(filename, "r") as infile:
+            if "Parmteqm" in infile.readline():
+                self.load_from_parmteq(filename)
+            else:
+                self.load_from_vecc(filename)
+
+    def load_from_vecc(self, filename=None):  
         data = []
 
         # noinspection PyTypeChecker
@@ -420,6 +427,34 @@ class FieldGenerator(object):
             print("I found {} cells with modulation 1 in the file..."
                   "assuming this is the entrance Radial Matching Section (RMS)."
                   " If this is incorrect, plase specify manually.".format(self._nrms))
+
+    def load_from_parmteq(self, filename=None):
+            
+        with open(filename, "r") as infile:
+            data = []
+            version = infile.readline().strip().split()[1].split(",")[0]
+
+            for line in infile:
+                if "Cell" in line and "V" in line:
+                    break
+
+            for line in infile:
+                if "Cell" in line and "V" in line:
+                    break
+
+                items = line.strip().split()
+                print(items)
+                if (len(items) ==  16) and ("T" not in items[0]):
+                    data.append(tuple(["NCS", False, False]) + tuple([items[0], 0.0, 0.0, items[7], items[8], 0.0, items[10], items[11]]))
+
+            self._parameters = np.array(data, dtype=self._cell_dtype)
+
+            if self._nrms is None:
+                self._nrms = len(np.where(self._parameters["modulation"] == 1.0)[0])
+                print("I found {} cells with modulation 1 in the file..."
+                      "assuming this is the entrance Radial Matching Section (RMS)."
+                      " If this is incorrect, plase specify manually.".format(self._nrms))
+
 
     def save_field_to_file(self, filename):
 
@@ -476,6 +511,8 @@ class FieldGenerator(object):
         else:
             a_fudge_end = ma_fudge_end = 1.0
 
+
+        print(cell_parameters["cell length"])
         a_fudge = interp1d([0.0, cell_parameters["cell length"]], [a_fudge_begin, a_fudge_end])
         ma_fudge = interp1d([0.0, cell_parameters["cell length"]], [ma_fudge_begin, ma_fudge_end])
 
@@ -516,6 +553,7 @@ class FieldGenerator(object):
         for _z in self._z_linear[idx2]:
             _z -= cell_start
             # noinspection PyTypeChecker
+            print(_z)
             _vane_x.append(root(vane_x, ap(_z)).x[0])
             # noinspection PyTypeChecker
             _vane_y.append(root(vane_y, ap(_z)).x[0])

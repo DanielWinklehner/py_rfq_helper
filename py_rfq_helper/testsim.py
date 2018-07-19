@@ -1,17 +1,17 @@
 from warp import *
 from py_rfq_helper import *
 
-FILENAME  = "vecc_rfq_004_py.dat"
+#FILENAME  = "vecc_rfq_004_py.dat"
+FILENAME  = "PARMTEQOUT.TXT"
 VANE_RAD  = 2 * cm
 VANE_DIST = 11 * cm
-
-print(VANE_DIST)
 
 NX     = 10
 NY     = 10
 NZ     = 256
 PRWALL = 0.3
 D_T    = 1e-8
+RF_FREQ = 3.32e7
 
 setup()
 
@@ -43,6 +43,8 @@ solver = MultiGrid3D()
 registersolver(solver)
 
 
+
+
 top.npinject = 45
 top.inject   = 2
 top.vinject  = 15 * kV
@@ -51,9 +53,12 @@ top.zinject  = -0.05
 top.injctspc = 1000000
 
 
-rfq = RFQ(filename=FILENAME, vane_radius=VANE_RAD, vane_distance=VANE_DIST, zstart=-0.05)
-#rfq.plot_efield()
 
+
+rfq = RFQ(filename=FILENAME, vane_radius=VANE_RAD, vane_distance=VANE_DIST, zstart=-0.05, rf_freq=RF_FREQ)
+rfq.plot_efield()
+
+exit(1)
 
 beam = Species(type=Dihydrogen, charge_state=+1, name="H2+")
 top.lrelativ = False
@@ -85,10 +90,12 @@ generate()
 
 def plotparticles(view=1):
     rfq._conductors.draw()
-    pfzr(plotsg=0, cond=0, titles=False, view=view)
-    ppzy(titles=False, view=view)
+    pfzx(plotsg=0, cond=0, titles=False, view=view)
+    ppzx(titles=False, view=view)
     limits(w3d.zmminglobal, w3d.zmmaxglobal)
-    ptitles("", "Z (m)", "Y (m)")
+    ptitles("", "Z (m)", "X (m)")
+    # rfq.plot_efield()
+
 
 def beamplots():
     fma()
@@ -100,5 +107,9 @@ def makeplots():
     if top.it%5 == 0:
         beamplots()
 
-step(500)
+#step(1000)
 hcp()
+
+# import matplotlib.pyplot as plt
+# plt.plot(rfq._ray)
+# plt.show()
