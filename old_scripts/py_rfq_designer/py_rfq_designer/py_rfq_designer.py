@@ -10,6 +10,7 @@ from scipy.optimize import root
 # import platform
 import matplotlib.pyplot as plt
 import gc
+import datetime
 
 # import time
 try:
@@ -38,6 +39,7 @@ X = 0
 Y = 1
 Z = 2
 XYZ = range(3)
+axes = {"X": 0, "Y": 1, "Z": 2}
 
 # --- This is a nice implementation of a simple timer I found online -DW --- #
 _tm = 0
@@ -934,6 +936,13 @@ class PyRFQ(object):
                                  "ef_itp": None,  type: Field
                                  }
 
+        self._variables_inventor = {"vane_type": "hybrid",
+                                    "vane_radius": 0.005,  # m
+                                    "vane_height": 0.05,  # m
+                                    "vane_height_type": 'absolute',
+                                    "nz": 500
+                                    }
+
     def __str__(self):
         text = "\nPyRFQ object with {} cells and length {:.4f} m. Vane voltage = {} V\n".format(self._cell_nos[-1],
                                                                                                 self._length,
@@ -976,7 +985,13 @@ class PyRFQ(object):
 
         return 0
 
-    def add_cells_from_file(self, filename=None):
+    def add_cells_from_file(self, filename=None, ignore_rms=False):
+        """
+        Reads a file with cell parameters and generates the respective RFQCell objects
+        :param filename:
+        :param ignore_rms: Bool. If True, any radial matching cells in the file are ignored.
+        :return:
+        """
 
         if filename is None:
             fd = FileDialog()
@@ -988,14 +1003,14 @@ class PyRFQ(object):
         with open(filename, "r") as infile:
             if "Parmteqm" in infile.readline():
                 # Detected Parmteqm file
-                self.read_input_parmteq(filename)
+                self.read_input_parmteq(filename, ignore_rms)
             else:
                 # Assume only other case is VECC input file for now
-                self.read_input_vecc(filename)
+                self.read_input_vecc(filename, ignore_rms)
 
         return 0
 
-    def read_input_parmteq(self, filename):
+    def read_input_parmteq(self, filename, ignore_rms):
 
         with open(filename, "r") as infile:
 
@@ -1013,14 +1028,14 @@ class PyRFQ(object):
                 if "Cell" in line and "V" in line:
                     break
 
-                # Cell number is string (has key sometimes)
+                # Cell number is a string (has key sometimes)
                 items = line.strip().split()
                 cell_no = items[0]
                 params = [float(item) for item in items[1:]]
 
                 if len(items) == 10 and cell_no == "0":
                     # This is the start cell, only there to provide a starting aperture
-                    if len(self._cells) == 0:
+                    if len(self._cells) == 0 and not ignore_rms:
                         # We use this only if there are no previous cells in the pyRFQ
                         # Else we ignore it...
                         self._cells.append(PyRFQCell(cell_type="STA",
@@ -1036,10 +1051,14 @@ class PyRFQ(object):
 
                 # For now we ignore "special" cells and add them manually
                 if "T" in cell_no or "M" in cell_no or "F" in cell_no:
+                    print("Ignored cell {}".format(cell_no))
                     continue
 
                 if params[7] == 1.0:
                     cell_type = "RMS"
+                    if ignore_rms:
+                        print("Ignored cell {}".format(cell_no))
+                        continue
                 else:
                     cell_type = "NCS"
 
@@ -1064,7 +1083,7 @@ class PyRFQ(object):
 
         return 0
 
-    def read_input_vecc(self, filename):
+    def read_input_vecc(self, filename, ignore_rms):
 
         with open(filename, "r") as infile:
 
@@ -1395,9 +1414,11 @@ class PyRFQ(object):
             if vane.vane_type == "xp":
                 z, x = vane.get_profile(nz=10000)
                 _ax.plot(z, x, color=colors[0], label="x-profile")
+                print("X Vane starting point", z[0], x[0])
             if vane.vane_type == "yp":
                 z, y = vane.get_profile(nz=10000)
                 _ax.plot(z, -y, color=colors[1], label="y-profile")
+                print("Y Vane starting point", z[0], y[0])
 
         plt.xlabel("z (m)")
         plt.ylabel("x/y (m)")
@@ -1454,11 +1475,41 @@ class PyRFQ(object):
 
         return _r, _v
 
-    def write_inventor_macro(self, save_folder=None):
+    def write_inventor_macro(self,
+                             save_folder=None,
+                             **kwargs):
+
+        """
+        This function writes out the vane profiles for X and Y and Inventor VBA macros that can
+        be run immediately to generate 3D solid models in Autodesk Inventor (c).
+        kwargs:
+        vane_type: one of 'rod', 'vane', default is 'vane' TODO: Only 'vane' implemented as of now.
+        vane_radius: radius of curvature of circular vanes, default is 0.005 m TODO: add hyperbolic vanes
+        vane_height: height of a single vane either from the minimum point (vane_height_type = 'relative')
+                            or from the center of the RFQ (vane_height_type = 'absolute')
+                            default is 0.05 m
+        vane_height_type: see above. default is absolute
+        nz: number of points to use for spline in z direction. default is 500.
+        :param save_folder: If None, a prompt is opened
+        :return:
+        """
+
+        # TODO: assert that height and absolute/relative combination work out geometrically
+        # TODO: with the amplitude ofthe modulations (i.e. no degenerate geometry)
+
+        for key, value in kwargs.items():
+            assert key in self._variables_inventor.keys(), "write_inventor_macro: Unrecognized kwarg '{}'".format(key)
+            self._variables_inventor[key] = value
+
+        assert self._variables_inventor["vane_type"] != "rod", "vane_type == 'rod' not implemented yet. Aborting"
 
         if save_folder is None:
+
             fd = FileDialog()
             save_folder, _ = fd.get_filename('folder')
+
+            if save_folder is None:
+                return 0
 
         for direction in ["X", "Y"]:
 
@@ -1473,31 +1524,23 @@ class PyRFQ(object):
 
     Dim oPart As PartDocument
     Dim oCompDef As PartComponentDefinition
-    Dim oSketch As Sketch3D
-    Dim oSpline As SketchSplines3D
+    Dim oSketch3D As Sketch3D
+    Dim oSpline As SketchSpline3D
     Dim vertexCollection1 As ObjectCollection
-    Dim oLine As SketchLines3D
-    Dim number_of_points As Long
-    Dim loft_section_index As Long
-    Dim frequency As Integer: frequency = 10
-    Dim oLoftDef As LoftDefinition
-    Dim oLoftSections As ObjectCollection
-    Dim spiral_electrode As LoftFeature
+
 """.format(direction)
 
             electrode_text = """
     Set oPart = oApp.Documents.Add(kPartDocumentObject, , True)
-
     Set oCompDef = oPart.ComponentDefinition
-
-"""
-            electrode_text += """
-    Set oSketch = oCompDef.Sketches3D.Add
-    Set oSpline = oSketch.SketchSplines3D
+    Set oSketch3D = oCompDef.Sketches3D.Add
     Set vertexCollection1 = oApp.TransientObjects.CreateObjectCollection(Null)
 
     FileName = "{}"
     fileNo = FreeFile 'Get first free file number
+
+    Dim minHeight As Double
+    minHeight = 10000  'cm, large number
 
     Open FileName For Input As #fileNo
     Do While Not EOF(fileNo)
@@ -1515,13 +1558,130 @@ class PyRFQ(object):
 
         Call vertexCollection1.Add(tg.CreatePoint(astrPieces(0), astrPieces(1), astrPieces(2)))
 
+        ' For X vane this is idx 0, for y vane it is idx 1
+        If CDbl(astrPieces({})) < minHeight Then
+            minHeight = CDbl(astrPieces({}))
+        End If
+
     Loop
 
     Close #fileNo
 
-    Call oSpline.Add(vertexCollection1)
+    Set oSpline = oSketch3D.SketchSplines3D.Add(vertexCollection1)
 
-""".format(os.path.join(save_folder, "Vane_{}.txt".format(direction)))
+""".format(os.path.join(save_folder, "Vane_{}.txt".format(direction)), axes[direction], axes[direction])
+
+            sweep_text = """
+    ' Now make a sketch to be swept
+    ' Start with a work plane
+    Dim oWP As WorkPlane
+    Set oWP = oCompDef.WorkPlanes.AddByNormalToCurve(oSpline, oSpline.StartSketchPoint)
+    
+    ' Add a 2D sketch
+    Dim oSketch2D As PlanarSketch
+    Set oSketch2D = oCompDef.Sketches.Add(oWP)
+"""
+            if direction == "X":
+                sweep_text += """
+    ' Make sure the orientation of the sketch is correct
+    ' We want the sketch x axis oriented with the lab y axis for X vane
+    oSketch2D.AxisEntity = oCompDef.WorkAxes.Item(2)
+"""
+            else:
+                sweep_text += """
+    ' Make sure the orientation of the sketch is correct
+    ' We want the sketch x axis oriented with the lab y axis for X vane
+    oSketch2D.AxisEntity = oCompDef.WorkAxes.Item(1)
+    ' Also, we need to flip the axis for Y vanes
+    oSketch2D.NaturalAxisDirection = False
+"""
+            sweep_text += """
+    ' Draw the half circle and block
+    Dim radius As Double
+    Dim height As Double
+    
+    radius = {}  'cm
+    height = {}  'cm
+    
+    Dim oOrigin As SketchEntity
+    Set oOrigin = oSketch2D.AddByProjectingEntity(oSpline.StartSketchPoint)
+""".format(self._variables_inventor["vane_radius"]*100.0,
+           self._variables_inventor["vane_height"]*100.0)
+
+            sweep_text += """
+    Dim oCenter As Point2d
+    Set oCenter = tg.CreatePoint2d(oOrigin.Geometry.X, oOrigin.Geometry.Y - radius)
+    
+    Dim oCirc1 As Point2d
+    Set oCirc1 = tg.CreatePoint2d(oOrigin.Geometry.X - radius, oOrigin.Geometry.Y - radius)
+    
+    Dim oCirc2 As Point2d
+    Set oCirc2 = tg.CreatePoint2d(oOrigin.Geometry.X + radius, oOrigin.Geometry.Y - radius)
+    
+    Dim arc As SketchArc
+    Set arc = oSketch2D.SketchArcs.AddByThreePoints(oCirc1, oOrigin.Geometry, oCirc2)
+    
+"""
+            sweep_text += """
+    Dim line1 As SketchLine
+    Set line1 = oSketch2D.SketchLines.AddByTwoPoints(arc.EndSketchPoint, arc.StartSketchPoint)
+
+    ' Create a Path
+    Dim oPath As Path
+    Set oPath = oCompDef.Features.CreatePath(oSpline)
+    
+    ' Create a profile.
+    Dim oProfile As Profile
+    Set oProfile = oSketch2D.Profiles.AddForSolid
+    
+    ' Create the sweep feature.
+    Dim oSweep As SweepFeature
+    Set oSweep = oCompDef.Features.SweepFeatures.AddUsingPath(oProfile, oPath, kJoinOperation)
+"""
+
+            # Small modification depending on absolute or relative vane height:
+            if self._variables_inventor["vane_height_type"] == 'relative':
+                sweep_text += """
+    ' Create another work plane above the vane
+    Dim oWP2 As WorkPlane
+    Set oWP2 = oCompDef.WorkPlanes.AddByPlaneAndOffset(oCompDef.WorkPlanes.Item({}), minHeight + height)
+""".format(axes[direction]+1)  # X is 0 and Y is 1, but the correct plane indices are 1 and 2
+            else:
+                sweep_text += """
+    ' Create another work plane above the vane
+    Dim oWP2 As WorkPlane
+    Set oWP2 = oCompDef.WorkPlanes.AddByPlaneAndOffset(oCompDef.WorkPlanes.Item({}), height)
+""".format(axes[direction]+1)  # X is 0 and Y is 1, but the correct plane indices are 1 and 2
+
+            sweep_text += """
+    ' Start a sketch
+    Set oSketch2D = oCompDef.Sketches.Add(oWP2)
+    
+    ' Project the bottom face of the sweep
+    ' (start and end face might be tilted and contribute)
+    ' at this point I don't know how Inventor orders the faces, 2 is my best guess but
+    ' might be different occasionally... -DW
+    Dim oEdge As Edge
+    For Each oEdge In oSweep.SideFaces.Item(2).Edges
+        Call oSketch2D.AddByProjectingEntity(oEdge)
+    Next
+
+    ' Create a profile.
+    Set oProfile = oSketch2D.Profiles.AddForSolid
+
+    ' Extrude
+    Dim oExtDef As ExtrudeDefinition
+    Dim oExt As ExtrudeFeature
+    Set oExtDef = oCompDef.Features.ExtrudeFeatures.CreateExtrudeDefinition(oProfile, kJoinOperation)
+    Call oExtDef.SetToNextExtent(kNegativeExtentDirection, oSweep.SurfaceBody)
+    Set oExt = oCompDef.Features.ExtrudeFeatures.Add(oExtDef)
+
+    ' Repeat but cutting in the up-direction
+    ' Extrude
+    Set oExtDef = oCompDef.Features.ExtrudeFeatures.CreateExtrudeDefinition(oProfile, kCutOperation)
+    Call oExtDef.SetThroughAllExtent(kPositiveExtentDirection)
+    Set oExt = oCompDef.Features.ExtrudeFeatures.Add(oExtDef)
+"""
 
             footer_text = """
     oPart.UnitsOfMeasure.LengthUnits = kMillimeterLengthUnits
@@ -1531,16 +1691,22 @@ class PyRFQ(object):
 End Sub
 """
 
+            # Write the Autodesk Inventor VBA macros:
             with open(os.path.join(save_folder, "Vane_{}.ivb".format(direction)), "w") as outfile:
 
-                outfile.write(header_text + electrode_text + footer_text)
+                outfile.write(header_text + electrode_text + sweep_text + footer_text)
 
+            # Write the vane profile files:
             with open(os.path.join(save_folder, "Vane_{}.txt".format(direction)), "w") as outfile:
 
                 if direction == "X":
                     for vane in self._vanes:
                         if vane.vane_type == "xp":
-                            z, x = vane.get_profile(nz=500)
+                            z, x = vane.get_profile(nz=self._variables_inventor["nz"])
+                            min_x = np.min(x)
+                            max_x = np.max(x)
+                            z_start = np.min(z)
+                            z_end = np.max(z)
 
                     for _x, _z in zip(x, z):
                         outfile.write("{:.6f}, {:.6f}, {:.6f}\n".format(
@@ -1551,13 +1717,38 @@ End Sub
                 else:
                     for vane in self._vanes:
                         if vane.vane_type == "yp":
-                            z, y = vane.get_profile(nz=500)
+                            z, y = vane.get_profile(nz=self._variables_inventor["nz"])
+                            min_y = np.min(y)
+                            max_y = np.max(y)
 
                     for _y, _z in zip(y, z):
                         outfile.write("{:.6f}, {:.6f}, {:.6f}\n".format(
                             0.0,
                             _y * 100.0,  # For some weird reason Inventor uses cm as default...
                             _z * 100.0))
+
+            # Write an info file with some useful information:
+            with open(os.path.join(save_folder, "Info.txt"), "w") as outfile:
+
+                datestr = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                outfile.write("Inventor Macros and Profile generated on {}\n\n".format(datestr))
+
+                outfile.write("Parameters:\n")
+                for key, value in self._variables_inventor.items():
+
+                    outfile.write("{}: {}\n".format(key, value))
+
+                if self._variables_inventor["vane_height_type"] == 'absolute':
+                    max_extent_x = max_extent_y = self._variables_inventor["vane_height"]
+                else:
+                    max_extent_x = self._variables_inventor["vane_height"] + min_x
+                    max_extent_y = self._variables_inventor["vane_height"] + min_y
+
+                outfile.write("\nOther useful values:\n")
+                outfile.write("Maximum Extent in X: {} m\n".format(max_extent_x))
+                outfile.write("Maximum Extent in Y: {} m\n".format(max_extent_y))
+                outfile.write("Z Start: {} m\n".format(z_start))
+                outfile.write("Z End: {} m\n".format(z_end))
 
         return 0
 
@@ -1572,7 +1763,7 @@ if __name__ == "__main__":
     #                   length=0.0)
 
     # Load the base RFQ design from the parmteq file
-    if myrfq.add_cells_from_file() == 1:
+    if myrfq.add_cells_from_file(ignore_rms=True) == 1:
         exit()
 
     myrfq.append_cell(cell_type="TCS",
@@ -1585,30 +1776,30 @@ if __name__ == "__main__":
                       modulation=1.0,
                       length=0.1)
 
-    myrfq.append_cell(cell_type="STA",
-                      aperture=0.0095691183,
-                      modulation=1.0,
-                      length=0.0)
-
-    myrfq.append_cell(cell_type="RMS",
-                      aperture=0.010944,
-                      modulation=1.0,
-                      length=0.018339)
-
-    myrfq.append_cell(cell_type="RMS",
-                      aperture=0.016344,
-                      modulation=1.0,
-                      length=0.018339)
-
-    myrfq.append_cell(cell_type="RMS",
-                      aperture=0.041051,
-                      modulation=1.0,
-                      length=0.018339)
-
-    myrfq.append_cell(cell_type="RMS",
-                      aperture=0.150000,
-                      modulation=1.0,
-                      length=0.018339)
+    # myrfq.append_cell(cell_type="STA",
+    #                   aperture=0.0095691183,
+    #                   modulation=1.0,
+    #                   length=0.0)
+    #
+    # myrfq.append_cell(cell_type="RMS",
+    #                   aperture=0.010944,
+    #                   modulation=1.0,
+    #                   length=0.018339)
+    #
+    # myrfq.append_cell(cell_type="RMS",
+    #                   aperture=0.016344,
+    #                   modulation=1.0,
+    #                   length=0.018339)
+    #
+    # myrfq.append_cell(cell_type="RMS",
+    #                   aperture=0.041051,
+    #                   modulation=1.0,
+    #                   length=0.018339)
+    #
+    # myrfq.append_cell(cell_type="RMS",
+    #                   aperture=0.150000,
+    #                   modulation=1.0,
+    #                   length=0.018339)
 
     # myrfq.add_cells_from_file(filename="/mnt/c/Users/Daniel Winklehner/Dropbox (MIT)/Code/Python/"
     #                                    "py_rfq_designer/py_rfq_designer/Parm_50_63cells.dat")
@@ -1673,8 +1864,13 @@ if __name__ == "__main__":
     myrfq.generate_vanes()
     print("Generating vanes took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
-    # myrfq.plot_vane_profile()
-    # myrfq.write_inventor_macro()
+    myrfq.plot_vane_profile()
+    myrfq.write_inventor_macro(vane_type='vane',
+                               vane_radius=0.005,
+                               vane_height=0.15,
+                               vane_height_type='absolute',
+                               nz=600)
+    exit()
 
     print("Generating full mesh for BEM++")
     ts = time.time()
