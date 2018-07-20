@@ -2,31 +2,34 @@ from warp import *
 from py_rfq_helper import *
 
 #FILENAME  = "vecc_rfq_004_py.dat"
-FILENAME  = "PARMTEQOUT.TXT"
+#FILENAME  = "PARMTEQOUT.TXT"
+FILENAME  = "Parm_50_63cells.dat"
+
 VANE_RAD  = 2 * cm
 VANE_DIST = 11 * cm
 
-NX     = 10
-NY     = 10
-NZ     = 256
-PRWALL = 0.3
-D_T    = 1e-8
-RF_FREQ = 3.32e7
+NX     = 16
+NY     = 16
+NZ     = 512
+PRWALL = 0.2
+D_T    = 1e-10
+RF_FREQ = 3.28e7
+Z_START = -0.15
 
 setup()
 
 w3d.solvergeom = w3d.XYZgeom
 
-w3d.xmmax =  0.3
-w3d.xmmin = -0.3
+w3d.xmmax =  PRWALL
+w3d.xmmin = -PRWALL
 w3d.nx    =  NX
 
-w3d.ymmax =  0.3
-w3d.ymmin = -0.3
+w3d.ymmax =  PRWALL
+w3d.ymmin = -PRWALL
 w3d.ny    =  NY
 
 w3d.zmmax =  1.538
-w3d.zmmin = -0.05
+w3d.zmmin =  Z_START
 w3d.nz    =  NZ
 
 w3d.bound0   = dirichlet
@@ -45,20 +48,20 @@ registersolver(solver)
 
 
 
-top.npinject = 45
-top.inject   = 2
-top.vinject  = 15 * kV
+top.npinject = 15
+top.inject   = 1
+# top.vinject  = 15 * kV # Only needed if top.inject != 1
 w3d.l_inj_rz = False
-top.zinject  = -0.05
+top.zinject  = Z_START 
 top.injctspc = 1000000
 
 
 
 
-rfq = RFQ(filename=FILENAME, vane_radius=VANE_RAD, vane_distance=VANE_DIST, zstart=-0.05, rf_freq=RF_FREQ)
-rfq.plot_efield()
+rfq = RFQ(filename=FILENAME, vane_radius=VANE_RAD, vane_distance=VANE_DIST, zstart=Z_START, rf_freq=RF_FREQ)
+#rfq.plot_efield()
 
-exit(1)
+#exit(1)
 
 beam = Species(type=Dihydrogen, charge_state=+1, name="H2+")
 top.lrelativ = False
@@ -107,7 +110,7 @@ def makeplots():
     if top.it%5 == 0:
         beamplots()
 
-#step(1000)
+step(50000)
 hcp()
 
 # import matplotlib.pyplot as plt

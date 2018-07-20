@@ -23,10 +23,10 @@ class RFQ(object):
         self._rf_freq       = rf_freq
         self._ray = []
 
-
         self.setup()
 
     def setup(self):
+        # Parameters: None
         #self._field.load_field_from_file(self._filename)
         self._field.load_field_from_cells(self._filename)
         self.import_field()
@@ -35,6 +35,10 @@ class RFQ(object):
 
 
     def import_field(self):
+        # import_field
+        # Parameters: none
+        # Returns: none
+        # Loads the appropriate field into Warp simulation.
 
         def fieldscaling(time):
             val = np.sin(time * 2 * np.pi * self._rf_freq)
@@ -51,10 +55,16 @@ class RFQ(object):
         addnewegrd(id=egrd, zs=0, ze=self._field._z_length, func=fieldscaling)
 
     def create_vanes(self):
+        # create_vanes
+        # Parameters: None
+        # Returns: None
+        # Creates the conducting objects in the warp simulation.
+        # Vanes and outer tube.
+
         length = self._field._z_length
         zcent  = (self._field._z_length / 2.0) + abs(self._zstart)
 
-        outer_shell = ZCylinderOut(self._vane_distance * 2, length, zcent=zcent)
+        outer_shell = ZCylinderOut(self._vane_distance + 0.05, length + abs(self._zstart), zcent=(length + self._zstart)/2)
 
         rod1 = ZCylinder(self._vane_radius, length, zcent=zcent, xcent=self._vane_distance)
         rod2 = ZCylinder(self._vane_radius, length, zcent=zcent, xcent=-self._vane_distance) 

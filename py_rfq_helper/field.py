@@ -85,17 +85,17 @@ class FieldLoader(object):
         #             modulation=1.0,
         #             length=0.02)
 
-        fg.add_cell(cell_type="TCS",
-                    aperture=0.01,
-                    modulation=2.0,
-                    length=0.041,
-                    flip_z=True)
+        # fg.add_cell(cell_type="TCS",
+        #             aperture=0.01,
+        #             modulation=2.0,
+        #             length=0.041,
+        #             flip_z=True)
 
-        fg.add_cell(cell_type="TCS",
-                    aperture=0.01,
-                    modulation=2.0,
-                    length=0.041,
-                    shift_cell_no=True)
+        # fg.add_cell(cell_type="TCS",
+        #             aperture=0.01,
+        #             modulation=2.0,
+        #             length=0.041,
+        #             shift_cell_no=True)
 
         # fg.set_plot_tcs_vanes(True)
         fg.set_calculate_vane_profile(True)

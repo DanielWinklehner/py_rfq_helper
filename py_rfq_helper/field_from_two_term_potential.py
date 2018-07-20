@@ -553,7 +553,6 @@ class FieldGenerator(object):
         for _z in self._z_linear[idx2]:
             _z -= cell_start
             # noinspection PyTypeChecker
-            print(_z)
             _vane_x.append(root(vane_x, ap(_z)).x[0])
             # noinspection PyTypeChecker
             _vane_y.append(root(vane_y, ap(_z)).x[0])
@@ -1207,21 +1206,21 @@ class FieldGenerator(object):
         # plt.rc('font', size=18)
 
         # Find nearest mesh value to desired x
-        x_plot = 0.001
+        x_plot = 0.05
         xvals = self._mesh_x.flatten()
         x_close = xvals[np.abs(xvals - x_plot).argmin()]
 
         plot_idx = np.where((self._mesh_x == x_close) & (self._mesh_y == 0.0))
-        plt.plot(self._mesh_z[plot_idx], self._ex[plot_idx], color=self._colors[2], label="$\mathrm{E}_\mathrm{x}$")
+        plt.plot(self._mesh_z[plot_idx], self._ex[plot_idx] / 10, color=self._colors[2], label="$\mathrm{E}_\mathrm{x}$")
         # plt.plot(self._mesh_z[plot_idx], self._ex2[plot_idx], linestyle='dashed', color='red')
 
         # Find nearest mesh value to desired y
-        y_plot = 0.001
+        y_plot = 0.05
         yvals = self._mesh_y.flatten()
         y_close = yvals[np.abs(yvals - y_plot).argmin()]
 
         plot_idx = np.where((self._mesh_y == y_close) & (self._mesh_x == 0.0))
-        plt.plot(self._mesh_z[plot_idx], self._ey[plot_idx], color=self._colors[1], label="$\mathrm{E}_\mathrm{y}$")
+        plt.plot(self._mesh_z[plot_idx], self._ey[plot_idx] / 10, color=self._colors[1], label="$\mathrm{E}_\mathrm{y}$")
         # plt.plot(self._mesh_z[plot_idx], self._ey2[plot_idx], linestyle='dashed', color='green')
 
         plot_idx = np.where((self._mesh_x == 0.0) & (self._mesh_y == 0.0))
@@ -1541,28 +1540,28 @@ if __name__ == "__main__":
     #             modulation=1.0,
     #             length=0.02)
 
-    fg.add_cell(cell_type="TCS",
-                aperture=0.01,
-                modulation=2.0,
-                length=0.041,
-                flip_z=True)
+    # fg.add_cell(cell_type="TCS",
+    #             aperture=0.01,
+    #             modulation=2.0,
+    #             length=0.041,
+    #             flip_z=True)
 
-    fg.add_cell(cell_type="TCS",
-                aperture=0.01,
-                modulation=2.0,
-                length=0.041,
-                shift_cell_no=True)
+    # fg.add_cell(cell_type="TCS",
+    #             aperture=0.01,
+    #             modulation=2.0,
+    #             length=0.041,
+    #             shift_cell_no=True)
 
     # fg.set_plot_tcs_vanes(True)
     fg.set_calculate_vane_profile(True)
     fg.generate()
-    fg.plot_vane_profile()
-    fg.write_inventor_macro()
+    # fg.plot_vane_profile()
+    # fg.write_inventor_macro()
 
     # fg.plot_pot_of_z()
-    # fg.plot_combo()
+    fg.plot_combo()
     # fg.plot_e_xy(z=1.33)
-    # fg.plot_ex_of_z(x=0.05)
+    fg.plot_ex_of_z(x=0.05)
     # fg.plot_pot_xy(z=1.33)
     # fg.plot_ez_of_z()
 
