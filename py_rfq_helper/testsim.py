@@ -1,9 +1,10 @@
 from warp import *
 from py_rfq_helper import *
 
-#FILENAME  = "vecc_rfq_004_py.dat"
+FILENAME  = "vecc_rfq_004_py.dat"
 #FILENAME  = "PARMTEQOUT.TXT"
-FILENAME  = "Parm_50_63cells.dat"
+#FILENAME  = "Parm_50_63cells.dat"
+#FILENAME  = "fieldoutput.txt"
 
 VANE_RAD  = 2 * cm
 VANE_DIST = 11 * cm
@@ -12,10 +13,10 @@ NX     = 16
 NY     = 16
 NZ     = 512
 PRWALL = 0.2
-D_T    = 1e-10
+D_T    = 1e-9
 RF_FREQ = 3.28e7
-Z_START = -0.15
-
+Z_START = 0.0 #the start of the rfq
+SIM_START = -0.15
 setup()
 
 w3d.solvergeom = w3d.XYZgeom
@@ -28,11 +29,12 @@ w3d.ymmax =  PRWALL
 w3d.ymmin = -PRWALL
 w3d.ny    =  NY
 
-w3d.zmmax =  1.538
-w3d.zmmin =  Z_START
+w3d.zmmax =  1.606 + 0.2
+w3d.zmmin =  SIM_START
+#w3d.zmmin = 0.0
 w3d.nz    =  NZ
 
-w3d.bound0   = dirichlet
+w3d.bound0   = neumann
 w3d.boundnz  = neumann
 w3d.boundxy  = neumann
 # ---   for particles
@@ -52,16 +54,16 @@ top.npinject = 15
 top.inject   = 1
 # top.vinject  = 15 * kV # Only needed if top.inject != 1
 w3d.l_inj_rz = False
-top.zinject  = Z_START 
+top.zinject  = SIM_START 
+w3d.zmmin = SIM_START
 top.injctspc = 1000000
 
 
+rfq = RFQ(filename=FILENAME, vane_radius=VANE_RAD, vane_distance=VANE_DIST, zstart=Z_START, rf_freq=RF_FREQ, sim_start=SIM_START)
 
-
-rfq = RFQ(filename=FILENAME, vane_radius=VANE_RAD, vane_distance=VANE_DIST, zstart=Z_START, rf_freq=RF_FREQ)
-#rfq.plot_efield()
-
-#exit(1)
+# winon()
+# rfq.plot_efield()
+# exit(1)
 
 beam = Species(type=Dihydrogen, charge_state=+1, name="H2+")
 top.lrelativ = False
@@ -91,28 +93,75 @@ package("w3d")
 generate()
 
 
-def plotparticles(view=1):
+# winon(3)
+# winon(0, suffix='XZ')
+winon(1, suffix='YZ')
+winon(2, suffix="X'X")
+winon(3, suffix="Y'Y")
+winon()
+
+def plotXZparticles(view=1):
+    plsys(view)
     rfq._conductors.draw()
-    pfzx(plotsg=0, cond=0, titles=False, view=view)
+    # pfzx(plotsg=0, cond=0, titles=False, view=view)
     ppzx(titles=False, view=view)
     limits(w3d.zmminglobal, w3d.zmmaxglobal)
     ptitles("", "Z (m)", "X (m)")
     # rfq.plot_efield()
 
+def plotYZparticles(view=1):
+    plsys(view)
+    rfq._conductors.draw()
+    # pfzy(plotsg=0, cond=0, titles=False, view=view)
+    ppzy(titles=False, view=view)
+    limits(w3d.zmminglobal, w3d.zmmaxglobal)
+    ptitles("", "Z (m)", "Y (m)")
+    # rfq.plot_efield()
+
+def plotXphase(view=1):
+    plsys(view)
+    beam.ppxxp()
+
+def plotYphase(view=1):
+    plsys(view)
+    beam.ppyyp()
 
 def beamplots():
+    window(0)
     fma()
-    plotparticles()
+    plotXZparticles()
+    refresh()
+
+    window(1)
+    fma()
+    plotYZparticles()
+    refresh()
+
+    window(2)
+    fma()
+    plotXphase()
+    refresh()
+
+    window(3)
+    fma()
+    plotYphase()
     refresh()
 
 @callfromafterstep
 def makeplots():
-    if top.it%5 == 0:
+    if top.it%1 == 0:
         beamplots()
-
-step(50000)
+        #window(0)
+        #rfq.plot_efield()
+        #refresh()
+        
+#print("===================")
+#print(rfq._field._nz)
+#winon()
+step(2500)
 hcp()
 
 # import matplotlib.pyplot as plt
+# print(rfq._ray)
 # plt.plot(rfq._ray)
 # plt.show()

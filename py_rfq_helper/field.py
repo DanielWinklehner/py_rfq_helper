@@ -133,6 +133,10 @@ class FieldLoader(object):
         dy = (y.max() - y.min()) / (len(unique(y)) - 1) 
         dz = (z.max() - z.min()) / (len(unique(z)) - 1) 
 
+        print(unique(x))
+        print("----------------------------------")
+        print(unique(y))
+        
         nx = nint((x.max() - x.min()) / dx)
         ny = nint((y.max() - y.min()) / dy)
         nz = nint((z.max() - z.min()) / dz)

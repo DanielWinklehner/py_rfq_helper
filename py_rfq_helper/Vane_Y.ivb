@@ -1,0 +1,144 @@
+Sub CreateRFQElectrodeY()
+    Dim oApp As Application
+    Set oApp = ThisApplication
+
+    ' Get a reference to the TransientGeometry object.
+    Dim tg As TransientGeometry
+    Set tg = oApp.TransientGeometry
+
+    Dim oPart As PartDocument
+    Dim oCompDef As PartComponentDefinition
+    Dim oSketch3D As Sketch3D
+    Dim oSpline As SketchSpline3D
+    Dim vertexCollection1 As ObjectCollection
+
+
+    Set oPart = oApp.Documents.Add(kPartDocumentObject, , True)
+    Set oCompDef = oPart.ComponentDefinition
+    Set oSketch3D = oCompDef.Sketches3D.Add
+    Set vertexCollection1 = oApp.TransientObjects.CreateObjectCollection(Null)
+
+    FileName = "/home/rfq-dip-student/Desktop/jaredh/py_rfq_helper/py_rfq_helper/Vane_Y.txt"
+    fileNo = FreeFile 'Get first free file number
+
+    Dim minHeight As Double
+    minHeight = 10000  'cm, large number
+
+    Open FileName For Input As #fileNo
+    Do While Not EOF(fileNo)
+
+        Dim strLine As String
+        Line Input #1, strLine
+
+        strLine = Trim$(strLine)
+
+        If strLine <> "" Then
+            ' Break the line up, using commas as the delimiter.
+            Dim astrPieces() As String
+            astrPieces = Split(strLine, ",")
+        End If
+
+        Call vertexCollection1.Add(tg.CreatePoint(astrPieces(0), astrPieces(1), astrPieces(2)))
+
+        ' For X vane this is idx 0, for y vane it is idx 1
+        If CDbl(astrPieces(1)) < minHeight Then
+            minHeight = CDbl(astrPieces(1))
+        End If
+
+    Loop
+
+    Close #fileNo
+
+    Set oSpline = oSketch3D.SketchSplines3D.Add(vertexCollection1)
+
+
+    ' Now make a sketch to be swept
+    ' Start with a work plane
+    Dim oWP As WorkPlane
+    Set oWP = oCompDef.WorkPlanes.AddByNormalToCurve(oSpline, oSpline.StartSketchPoint)
+    
+    ' Add a 2D sketch
+    Dim oSketch2D As PlanarSketch
+    Set oSketch2D = oCompDef.Sketches.Add(oWP)
+
+    ' Make sure the orientation of the sketch is correct
+    ' We want the sketch x axis oriented with the lab y axis for X vane
+    oSketch2D.AxisEntity = oCompDef.WorkAxes.Item(1)
+    ' Also, we need to flip the axis for Y vanes
+    oSketch2D.NaturalAxisDirection = False
+
+    ' Draw the half circle and block
+    Dim radius As Double
+    Dim height As Double
+    
+    radius = 0.5  'cm
+    height = 15.0  'cm
+    
+    Dim oOrigin As SketchEntity
+    Set oOrigin = oSketch2D.AddByProjectingEntity(oSpline.StartSketchPoint)
+
+    Dim oCenter As Point2d
+    Set oCenter = tg.CreatePoint2d(oOrigin.Geometry.X, oOrigin.Geometry.Y - radius)
+    
+    Dim oCirc1 As Point2d
+    Set oCirc1 = tg.CreatePoint2d(oOrigin.Geometry.X - radius, oOrigin.Geometry.Y - radius)
+    
+    Dim oCirc2 As Point2d
+    Set oCirc2 = tg.CreatePoint2d(oOrigin.Geometry.X + radius, oOrigin.Geometry.Y - radius)
+    
+    Dim arc As SketchArc
+    Set arc = oSketch2D.SketchArcs.AddByThreePoints(oCirc1, oOrigin.Geometry, oCirc2)
+    
+
+    Dim line1 As SketchLine
+    Set line1 = oSketch2D.SketchLines.AddByTwoPoints(arc.EndSketchPoint, arc.StartSketchPoint)
+
+    ' Create a Path
+    Dim oPath As Path
+    Set oPath = oCompDef.Features.CreatePath(oSpline)
+    
+    ' Create a profile.
+    Dim oProfile As Profile
+    Set oProfile = oSketch2D.Profiles.AddForSolid
+    
+    ' Create the sweep feature.
+    Dim oSweep As SweepFeature
+    Set oSweep = oCompDef.Features.SweepFeatures.AddUsingPath(oProfile, oPath, kJoinOperation)
+
+    ' Create another work plane above the vane
+    Dim oWP2 As WorkPlane
+    Set oWP2 = oCompDef.WorkPlanes.AddByPlaneAndOffset(oCompDef.WorkPlanes.Item(2), height)
+
+    ' Start a sketch
+    Set oSketch2D = oCompDef.Sketches.Add(oWP2)
+    
+    ' Project the bottom face of the sweep
+    ' (start and end face might be tilted and contribute)
+    ' at this point I don't know how Inventor orders the faces, 2 is my best guess but
+    ' might be different occasionally... -DW
+    Dim oEdge As Edge
+    For Each oEdge In oSweep.SideFaces.Item(2).Edges
+        Call oSketch2D.AddByProjectingEntity(oEdge)
+    Next
+
+    ' Create a profile.
+    Set oProfile = oSketch2D.Profiles.AddForSolid
+
+    ' Extrude
+    Dim oExtDef As ExtrudeDefinition
+    Dim oExt As ExtrudeFeature
+    Set oExtDef = oCompDef.Features.ExtrudeFeatures.CreateExtrudeDefinition(oProfile, kJoinOperation)
+    Call oExtDef.SetToNextExtent(kNegativeExtentDirection, oSweep.SurfaceBody)
+    Set oExt = oCompDef.Features.ExtrudeFeatures.Add(oExtDef)
+
+    ' Repeat but cutting in the up-direction
+    ' Extrude
+    Set oExtDef = oCompDef.Features.ExtrudeFeatures.CreateExtrudeDefinition(oProfile, kCutOperation)
+    Call oExtDef.SetThroughAllExtent(kPositiveExtentDirection)
+    Set oExt = oCompDef.Features.ExtrudeFeatures.Add(oExtDef)
+
+    oPart.UnitsOfMeasure.LengthUnits = kMillimeterLengthUnits
+
+    ThisApplication.ActiveView.Fit
+
+End Sub
