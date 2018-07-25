@@ -5,14 +5,14 @@ from py_rfq_helper import *
 #FILENAME  = "PARMTEQOUT.TXT"
 #FILENAME  = "Parm_50_63cells.dat"
 #FILENAME  = "fieldoutput.txt"
-FILENAME  = "fieldw0.15width.dat"
+FILENAME  = "fieldw015width.dat"
 
 VANE_RAD  = 2 * cm
 VANE_DIST = 11 * cm
 
-NX     = 16
-NY     = 16
-NZ     = 512
+NX     = 32
+NY     = 32
+NZ     = 1024
 PRWALL = 0.2
 D_T    = 1e-9
 RF_FREQ = 3.28e7
@@ -51,7 +51,7 @@ registersolver(solver)
 
 
 
-top.npinject = 15
+top.npinject = 50
 top.inject   = 1
 # top.vinject  = 15 * kV # Only needed if top.inject != 1
 w3d.l_inj_rz = False
