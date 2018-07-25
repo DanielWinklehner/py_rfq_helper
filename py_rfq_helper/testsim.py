@@ -1,5 +1,6 @@
 from warp import *
 from py_rfq_helper import *
+import time
 
 #FILENAME  = "vecc_rfq_004_py.dat"
 #FILENAME  = "PARMTEQOUT.TXT"
@@ -10,9 +11,9 @@ FILENAME  = "fieldw015width.dat"
 VANE_RAD  = 2 * cm
 VANE_DIST = 11 * cm
 
-NX     = 32
-NY     = 32
-NZ     = 1024
+NX     = 16
+NY     = 16
+NZ     = 512
 PRWALL = 0.2
 D_T    = 1e-9
 RF_FREQ = 3.28e7
@@ -30,9 +31,8 @@ w3d.ymmax =  PRWALL
 w3d.ymmin = -PRWALL
 w3d.ny    =  NY
 
-w3d.zmmax =  1.606 + 0.2
+w3d.zmmax =  1.456 + 0.2
 w3d.zmmin =  SIM_START
-#w3d.zmmin = 0.0
 w3d.nz    =  NZ
 
 w3d.bound0   = neumann
@@ -50,21 +50,38 @@ registersolver(solver)
 
 
 
-
 top.npinject = 50
 top.inject   = 1
-# top.vinject  = 15 * kV # Only needed if top.inject != 1
 w3d.l_inj_rz = False
 top.zinject  = SIM_START 
 w3d.zmmin = SIM_START
 top.injctspc = 1000000
 
 
-rfq = RFQ(filename=FILENAME, vane_radius=VANE_RAD, vane_distance=VANE_DIST, zstart=Z_START, rf_freq=RF_FREQ, sim_start=SIM_START)
 
-# winon()
-# rfq.plot_efield()
-# exit(1)
+# RFQ creation and initiliaztion of parameters
+
+rfq = RFQ(filename=FILENAME, from_cells=False)
+rfq.vane_radius   = VANE_RAD
+rfq.vane_distance = VANE_DIST
+rfq.zstart            = Z_START
+rfq.rf_freq           = RF_FREQ
+rfq.sim_start         = SIM_START
+rfq.sim_end_buffer    = 0.2
+rfq.install()
+
+
+
+# Setting up mesh refinement. Twice the resolution within field boundaries
+refinedsolver = MRBlock3D()
+registersolver(refinedsolver)
+childmesh = refinedsolver.addchild(mins=[rfq._field._xmin, rfq._field._ymin, rfq._field._zmin], 
+                            maxs=[rfq._field._xmax, rfq._field._ymax, w3d.zmmax],
+                            refinement=[2,2,2])
+
+# refinedsolver.drawboxzx(1.5)
+
+
 
 beam = Species(type=Dihydrogen, charge_state=+1, name="H2+")
 top.lrelativ = False
@@ -93,31 +110,35 @@ derivqty()
 package("w3d")
 generate()
 
-
-# winon(3)
-# winon(0, suffix='XZ')
 winon(1, suffix='YZ')
 winon(2, suffix="X'X")
 winon(3, suffix="Y'Y")
 winon()
 
 def plotXZparticles(view=1):
+
     plsys(view)
+
+    plg([-PRWALL,PRWALL],[0,0])
+    plg([-PRWALL,PRWALL],[rfq._field._zmax, rfq._field._zmax])
+
     rfq._conductors.draw()
     # pfzx(plotsg=0, cond=0, titles=False, view=view)
     ppzx(titles=False, view=view)
     limits(w3d.zmminglobal, w3d.zmmaxglobal)
     ptitles("", "Z (m)", "X (m)")
-    # rfq.plot_efield()
 
 def plotYZparticles(view=1):
     plsys(view)
+
+    plg([-PRWALL,PRWALL],[0,0])
+    plg([-PRWALL,PRWALL],[rfq._field._zmax, rfq._field._zmax])
+    
     rfq._conductors.draw()
     # pfzy(plotsg=0, cond=0, titles=False, view=view)
     ppzy(titles=False, view=view)
     limits(w3d.zmminglobal, w3d.zmmaxglobal)
     ptitles("", "Z (m)", "Y (m)")
-    # rfq.plot_efield()
 
 def plotXphase(view=1):
     plsys(view)
@@ -156,11 +177,25 @@ def makeplots():
         #rfq.plot_efield()
         #refresh()
         
-#print("===================")
-#print(rfq._field._nz)
-#winon()
-step(2500)
+
+starttime = time.time()
+
+step(10000)
 hcp()
+
+endtime = time.time()
+
+print("Elapsed time for simulation: {}".format(endtime-starttime))
+
+part_x = beam.getx()
+part_y = beam.gety()
+part_z = beam.getz()
+
+with open("particleoutput.dat", 'w') as outfile:
+    outfile.write("x, y, z\n")
+    for x, y, z in zip(part_x, part_y, part_z):
+        outfile.write("{:.4e}   {:.4e}   {:.4e}\n".format(x, y, z))
+
 
 # import matplotlib.pyplot as plt
 # print(rfq._ray)
