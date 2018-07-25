@@ -1,10 +1,11 @@
 from warp import *
 from py_rfq_helper import *
 
-FILENAME  = "vecc_rfq_004_py.dat"
+#FILENAME  = "vecc_rfq_004_py.dat"
 #FILENAME  = "PARMTEQOUT.TXT"
 #FILENAME  = "Parm_50_63cells.dat"
 #FILENAME  = "fieldoutput.txt"
+FILENAME  = "fieldw0.15width.dat"
 
 VANE_RAD  = 2 * cm
 VANE_DIST = 11 * cm

@@ -323,7 +323,7 @@ class FieldGenerator(object):
         self._a_init = 0.038802  # (m)
         self._resolution = resolution
         self._bempp_mesh_size = resolution
-        self._xy_limits = [-0.01, 0.01, -0.01, 0.01]
+        self._xy_limits = [-0.015, 0.015, -0.015, 0.015]
         self._total_length = 0.0  # (m)
 
         self._nx = int((self._xy_limits[1] - self._xy_limits[0]) / self._resolution) + 1
@@ -1511,8 +1511,8 @@ if __name__ == "__main__":
     # loadpath = os.path.join(folder, r"Parm_50_63cells.dat")
     # loadpath = os.path.join(folder, r"Parm_50_last3.dat")
     #savepath = os.path.join(".", r"vecc_rfq_003_py.dat")
-    savepath = os.path.join(".", r"vecc_rfq_004_py.dat")
-
+    #savepath = os.path.join(".", r"vecc_rfq_004_py.dat")
+    savepath = os.path.join('.', r"fieldw015width.dat")
 
     operapath = os.path.join(folder, "Transition_cell_pot_field.table")
     #loadpath = r"Parm_50_last3.dat"
