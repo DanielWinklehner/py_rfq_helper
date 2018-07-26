@@ -954,6 +954,7 @@ class PyRFQ(object):
                                  "operator": None,
                                  "grid_fun": None,
                                  "ef_itp": None,  # type: Field
+                                 "ef_pot": None
                                  }
 
         self._variables_inventor = {"vane_type": "hybrid",
@@ -1126,6 +1127,8 @@ class PyRFQ(object):
 
                 if params[4] == 1.0:
                     cell_type = "RMS"
+                    if ignore_rms:
+                        continue
                 else:
                     cell_type = "NCS"
 
@@ -1154,10 +1157,16 @@ class PyRFQ(object):
                          limits=((None, None), (None, None), (None, None)),
                          res=(0.002, 0.002, 0.002),
                          domain_decomp=(4, 4, 4),
-                         overlap=0):
+                         overlap=0,
+                         phi_only=False):
         """
         Calculates the E-Field from the BEM++ solution using the user defined cube or
         the cube corresponding to the cyclindrical outer boundary.
+
+        TODO: This function is not very MPI aware and could be optimized!
+        TODO: BEMPP uses all available processors on the node to calculate the potential.
+        TODO: But if we run on multiple nodes, we could partition the domains.
+
         :param limits: tuple, list or np.ndarray of shape (3, 2)
                        containing xmin, xmax, ymin, ymax, zmin, zmax
                        use None to use the individual limit from the electrode system.
@@ -1177,7 +1186,6 @@ class PyRFQ(object):
                   "Must be ((xmin, xmax), (ymin, ymax), (zmin, zmax)) = (3, 2).".format(limits.shape))
             return 1
 
-        # TODO: If solution and function space are saved to a temp folder, this could be done in parallel too maybe.
         sol = self._variables_bempp["solution"]
         fsp = self._variables_bempp["f_space"]
 
@@ -1255,6 +1263,11 @@ class PyRFQ(object):
                     del grid_pts
                     del sl_pot
                     del _pot
+
+        self._variables_bempp["ef_phi"] = pot
+
+        if phi_only:
+            return pot
 
         ex, ey, ez = np.gradient(pot, _d[X], _d[Y], _d[Z])
 
@@ -1420,19 +1433,21 @@ class PyRFQ(object):
         # self._variables_bempp["grid_fun"] = dirichlet_fun
 
         # Quick test: plot potential across RFQ center
-        # _x = np.linspace(-0.04, 0.04, 100)
-        # _y = np.linspace(-0.04, 0.04, 100)
-        # mesh = np.meshgrid(_x, _y, 0.5, indexing='ij')  # type: np.ndarray
-        # grid_pts = np.vstack([_mesh.ravel() for _mesh in mesh])
-        # sl_pot = bempp.api.operators.potential.laplace.single_layer(dp0_space, grid_pts)
-        # _pot = sl_pot * sol
-        # _pot = _pot.reshape([100, 100])
-        # plt.imshow(_pot.T, extent=(-0.04, 0.04, -0.04, 0.04))
-        # plt.xlabel("x (m)")
-        # plt.ylabel("y (m)")
-        # plt.title("Potential (V)")
-        # plt.colorbar()
-        # plt.show()
+        _x = np.linspace(-0.04, 0.04, 100)
+        _y = np.linspace(-0.04, 0.04, 100)
+        mesh = np.meshgrid(_x, _y, 0.5, indexing='ij')  # type: np.ndarray
+        grid_pts = np.vstack([_mesh.ravel() for _mesh in mesh])
+        sl_pot = bempp.api.operators.potential.laplace.single_layer(dp0_space, grid_pts)
+        _pot = sl_pot * sol
+        _pot = _pot.reshape([100, 100])
+        plt.imshow(_pot.T, extent=(-0.04, 0.04, -0.04, 0.04))
+        plt.xlabel("x (m)")
+        plt.ylabel("y (m)")
+        plt.title("Potential (V)")
+        plt.colorbar()
+        plt.show()
+
+        exit()
 
         return 0
 
