@@ -4,36 +4,65 @@ from field import *
 class RFQ(object):
     def __init__(self,
                  filename=None,
-                 vane_radius=0.0,
-                 vane_distance=0.0,
-                 zstart=0.0,
-                 rf_freq=0.0,
-                 sim_start=0.0):
+                 from_cells=False,
+                 ):
         # Takes in a filename with Cell parameters or field
         # Vane radius set to some value if using simple rod approximation
         # Vane distance
         # Start position of the RFQ
 
+        # User Parameters
+        #     Passed in via constructor
+        self._from_cells    = from_cells
         self._filename      = filename
-        self._field         = FieldLoader()
-        self._vane_radius   = vane_radius
-        self._vane_distance = vane_distance
-        self._zstart        = zstart
-        self._conductors    = None
-        self._rf_freq       = rf_freq
-        self._sim_start     = sim_start
-        self._ray           = []
 
+        #     Must be set outside of object creation
+        self.simple_rods   = True
+        self.vane_radius   = None
+        self.vane_distance = None
+        self.rf_freq       = None
+        self.zstart        = 0.0
+        self.sim_start     = 0.0
+        self.sim_end_buffer = 0.0
+
+
+        # "Private" variables
+        self._conductors    = None
+        self._field         = FieldLoader()
+        self._sim_end       = 0.0
+
+        # Debugging
+        self._ray           = [] #debugging
+
+    def install(self):
+        # Parameters: None
+        # Returns: None
+        # Installs the field and conductors into Warp
         self.setup()
 
     def setup(self):
         # Parameters: None
-        self._field.load_field_from_file(self._filename)
-        #self._field.load_field_from_cells(self._filename)
+
+        if (not self.vane_radius) and (self.simple_rods):
+            print("Please specify the vane radius (vane_radius) for the simple rod structure. Exiting.")
+            exit(1)
+        if (not self.vane_distance):
+            print("Please specify the vane distance (vane_distance) from axis. Exiting.")
+            exit(1)
+        if (not self.rf_freq):
+            print("The RF frequency (rf_freq) must be specified. Exiting")
+            exit(1)
+
+        if self._from_cells:
+            self._field.load_field_from_cells(self._filename)
+        else:
+            self._field.load_field_from_file(self._filename)
+        
+
+        self._sim_end = self._field._zmax + self.sim_end_buffer
+
         self.import_field()
         self.create_vanes()
-
-
 
     def import_field(self):
         # import_field
@@ -42,7 +71,7 @@ class RFQ(object):
         # Loads the appropriate field into Warp simulation.
 
         def fieldscaling(time):
-            val = np.sin(time * 2 * np.pi *self._rf_freq)
+            val = np.cos(time * 2 * np.pi * self.rf_freq)
             print(time, val)
             self._ray.append(val)
             return val
@@ -62,8 +91,6 @@ class RFQ(object):
         print("======================================")
         
         addnewegrd(id=egrd, zs=0, xs=self._field._xmin, ys=self._field._ymin, ze=self._field._z_length, func=fieldscaling)
-        #self.plot_efield()
-
 
 
     def create_vanes(self):
@@ -74,19 +101,18 @@ class RFQ(object):
         # Vanes and outer tube.
 
         length = self._field._z_length
-        zcent  = (self._field._z_length / 2.0) + abs(self._zstart)
+        zcent  = (self._field._z_length / 2.0) + abs(self.zstart)
 
-        print(length)
-        print(length+2*abs(self._sim_start))
-        
-        outer_shell = ZCylinderOut(self._vane_distance + 0.05, length + 2*abs(self._sim_start) + 0.2, zcent=(length + self._zstart + 0.2)/2)
+        print("zmin {}  zmax {}".format(self._field._zmax, self._field._zmin))
+        print("simend {} simstart {}".format(self._sim_end, self.sim_start))
 
-        # rod1 = ZCylinder(self._vane_radius, length, zcent=zcent, xcent=self._vane_distance)
-        # rod2 = ZCylinder(self._vane_radius, length, zcent=zcent, xcent=-self._vane_distance) 
-        # rod3 = ZCylinder(self._vane_radius, length, zcent=zcent, ycent=self._vane_distance)
-        # rod4 = ZCylinder(self._vane_radius, length, zcent=zcent, ycent=-self._vane_distance)
-        # total_conductors = outer_shell + rod1 + rod2 + rod3 + rod4
-        total_conductors = outer_shell
+        outer_shell = ZCylinderOut(self.vane_distance + 0.05, (self._sim_end - self.sim_start), zcent=(self._sim_end + self.sim_start)/2)
+
+        rod1 = ZCylinder(self.vane_radius, length, zcent=zcent, xcent=self.vane_distance)
+        rod2 = ZCylinder(self.vane_radius, length, zcent=zcent, xcent=-self.vane_distance) 
+        rod3 = ZCylinder(self.vane_radius, length, zcent=zcent, ycent=self.vane_distance)
+        rod4 = ZCylinder(self.vane_radius, length, zcent=zcent, ycent=-self.vane_distance)
+        total_conductors = outer_shell + rod1 + rod2 + rod3 + rod4
         
         installconductor(total_conductors)
         scraper = ParticleScraper(total_conductors)
@@ -112,3 +138,4 @@ class RFQ(object):
         fma()
         #plotegrd(component="y", iz=50)
         #fma()
+    
