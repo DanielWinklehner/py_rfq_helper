@@ -1517,48 +1517,6 @@ class PyRFQ(object):
 
         return 0
 
-    def track(self, ion, r_start=None, v_start=None, nsteps=10000, dt=1e-12):
-
-        # TODO: For now break if r_start or v_start are not given, later get from class properties?
-        assert(r_start is not None and v_start is not None), "Have to specify r_start and v_start for now!"
-        assert isinstance(ion, IonSpecies), "ion has to be an IonSpecies object!"
-
-        if self._variables_bempp["ef_itp"] is None:
-            print("No E-Field has been generated. Cannot track!")
-            return 1
-
-        pusher = ParticlePusher(ion, "boris")  # Note: leapfrog is inaccurate above dt = 1e-12
-
-        efield1 = self._variables_bempp["ef_itp"]  # type: Field
-        bfield1 = Field(dim=0, field={"x": 0.0, "y": 0.0, "z": 0.0})
-
-        _r = np.zeros([nsteps + 1, 3])
-        _v = np.zeros([nsteps + 1, 3])
-        _r[0, :] = r_start[:]
-        _v[0, :] = v_start[:]
-
-        # initialize the velocity half a step back:
-        ef = efield1(_r[0])
-        bf = bfield1(_r[0])
-
-        _, _v[0] = pusher.push(_r[0], _v[0], ef, bf, -0.5 * dt)
-
-        t = 0.0
-        freq = 32.8e6
-        phi = 0.0
-
-        # Track for n steps
-        for i in range(nsteps):
-
-            ef = np.cos(2.0 * np.pi * t * freq + phi) * efield1(_r[i])
-            bf = np.cos(2.0 * np.pi * t * freq + phi) * bfield1(_r[i])
-
-            _r[i + 1], _v[i + 1] = pusher.push(_r[i], _v[i], ef, bf, dt)
-
-            t += dt
-
-        return _r, _v
-
     def write_inventor_macro(self,
                              save_folder=None,
                              **kwargs):
@@ -1950,11 +1908,11 @@ if __name__ == "__main__":
 
     # if rank == 0:
     #     myrfq.plot_vane_profile()
-    # myrfq.write_inventor_macro(vane_type='vane',
-    #                            vane_radius=0.005,
-    #                            vane_height=0.15,
-    #                            vane_height_type='absolute',
-    #                            nz=600)
+    #     myrfq.write_inventor_macro(vane_type='vane',
+    #                                vane_radius=0.005,
+    #                                vane_height=0.15,
+    #                                vane_height_type='absolute',
+    #                                nz=600)
     # exit()
     
     print("Generating full mesh for BEM++")
@@ -1980,34 +1938,12 @@ if __name__ == "__main__":
                            domain_decomp=(1, 1, 50),
                            overlap=0)
     print("E-Field took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
-    
-    # ts = time.time()
-    # h2p = IonSpecies("H2_1+", 1.0)
-    # h2p.calculate_from_energy_mev(0.015 / h2p.a())
-    #
-    # npart = 40
-    # steps = 11000
-    #
-    # zs = np.linspace(-0.04, 0.0, npart)
-    # r = np.zeros([npart, steps + 1, 3])
-    # v = np.zeros([npart, steps + 1, 3])
-    #
-    # # TODO: Make tracking multiproc
-    # for _i, _zs in enumerate(zs):
-    #     print("Tracking particle {}".format(_i))
-    #     r[_i, :, :], v[_i, :, :] = myrfq.track(ion=h2p,
-    #                                            r_start=np.array([0.0, 0.0, _zs]),
-    #                                            v_start=np.array([0.0, 0.0, h2p.v_m_per_s()]),
-    #                                            nsteps=steps,
-    #                                            dt=1e-10)
-    #
-    # print("Tracking took {:.4f} s".format(time.time() - ts))
 
     if rank == 0:
         myrfq.plot_combo(xypos=0.005, xyscale=1.0, zlim=(-0.1, 1.35))
 
     import pickle
-    with open("efield_out.dat", "wb") as outfile:
+    with open("efield_out.field", "wb") as outfile:
         pickle.dump(myrfq._variables_bempp["ef_itp"], outfile)
         
     # myrfq.plot_vane_profile()
