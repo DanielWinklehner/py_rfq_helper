@@ -15,7 +15,7 @@ NX     = 16
 NY     = 16
 NZ     = 512
 PRWALL = 0.2
-D_T    = 1e-9
+D_T    = 1e-10
 RF_FREQ = 3.28e7
 Z_START = 0.0 #the start of the rfq
 SIM_START = -0.15
@@ -45,10 +45,10 @@ top.prwall   = PRWALL
 
 top.dt = D_T
 
-solver = MultiGrid3D()
-registersolver(solver)
-
-
+refinedsolver = MRBlock3D()
+registersolver(refinedsolver)
+#solver = MultiGrid3D()
+#registersolver(solver)
 
 top.npinject = 50
 top.inject   = 1
@@ -70,18 +70,9 @@ rfq.sim_start         = SIM_START
 rfq.sim_end_buffer    = 0.2
 rfq.install()
 
-
-
-# Setting up mesh refinement. Twice the resolution within field boundaries
-refinedsolver = MRBlock3D()
-registersolver(refinedsolver)
-childmesh = refinedsolver.addchild(mins=[rfq._field._xmin, rfq._field._ymin, rfq._field._zmin], 
-                            maxs=[rfq._field._xmax, rfq._field._ymax, w3d.zmmax],
-                            refinement=[2,2,2])
-
-# refinedsolver.drawboxzx(1.5)
-
-
+childmesh = refinedsolver.addchild(mins=[rfq._field._xmin, rfq._field._ymin, SIM_START], 
+                             maxs=[rfq._field._xmax, rfq._field._ymax, w3d.zmmax],
+                             refinement=[2,2,2])
 
 beam = Species(type=Dihydrogen, charge_state=+1, name="H2+")
 top.lrelativ = False
@@ -119,8 +110,8 @@ def plotXZparticles(view=1):
 
     plsys(view)
 
-    plg([-PRWALL,PRWALL],[0,0])
-    plg([-PRWALL,PRWALL],[rfq._field._zmax, rfq._field._zmax])
+    plg([-PRWALL,PRWALL],[0,0], color=red)
+    plg([-PRWALL,PRWALL],[rfq._field._zmax, rfq._field._zmax], color=red)
 
     rfq._conductors.draw()
     # pfzx(plotsg=0, cond=0, titles=False, view=view)
@@ -131,8 +122,8 @@ def plotXZparticles(view=1):
 def plotYZparticles(view=1):
     plsys(view)
 
-    plg([-PRWALL,PRWALL],[0,0])
-    plg([-PRWALL,PRWALL],[rfq._field._zmax, rfq._field._zmax])
+    plg([-PRWALL,PRWALL],[0,0], color=red)
+    plg([-PRWALL,PRWALL],[rfq._field._zmax, rfq._field._zmax], color=red)
     
     rfq._conductors.draw()
     # pfzy(plotsg=0, cond=0, titles=False, view=view)
@@ -171,7 +162,7 @@ def beamplots():
 
 @callfromafterstep
 def makeplots():
-    if top.it%1 == 0:
+    if top.it%50 == 0:
         beamplots()
         #window(0)
         #rfq.plot_efield()
@@ -180,7 +171,7 @@ def makeplots():
 
 starttime = time.time()
 
-step(10000)
+step(25000)
 hcp()
 
 endtime = time.time()
@@ -191,10 +182,13 @@ part_x = beam.getx()
 part_y = beam.gety()
 part_z = beam.getz()
 
+print(len(part_x))
+
 with open("particleoutput.dat", 'w') as outfile:
     outfile.write("x, y, z\n")
     for x, y, z in zip(part_x, part_y, part_z):
         outfile.write("{:.4e}   {:.4e}   {:.4e}\n".format(x, y, z))
+
 
 
 # import matplotlib.pyplot as plt
