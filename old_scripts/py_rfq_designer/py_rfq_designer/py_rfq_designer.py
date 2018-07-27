@@ -954,7 +954,10 @@ class PyRFQ(object):
                                  "operator": None,
                                  "grid_fun": None,
                                  "ef_itp": None,  # type: Field
-                                 "ef_pot": None
+                                 "ef_pot": None,
+                                 "add_cyl": False,  # Do we want to add a grounded cylinder to the BEMPP problem
+                                 "cyl_id": 0.2,  # Inner diameter of surrounding cylinder
+                                 "cyl_gap": 0.01  # gap between vanes and cylinder TODO: Maybe make this asymmetric?
                                  }
 
         self._variables_inventor = {"vane_type": "hybrid",
@@ -1268,7 +1271,12 @@ class PyRFQ(object):
 
         if phi_only:
             return pot
+        
 
+        import numpy.ma as ma
+        epsilon = 0.012 * self._voltage  # TODO: Make epsilon user parameter?
+        pot = ma.masked_array(pot, mask=(np.abs(pot) >= (self._voltage-epsilon)))
+        
         ex, ey, ez = np.gradient(pot, _d[X], _d[Y], _d[Z])
 
         del pot
@@ -1378,6 +1386,54 @@ class PyRFQ(object):
                 # Increase the running counters
                 vertex_counter += _vertices.shape[1]
 
+            if self._variables_bempp["add_cyl"]:
+
+                zmin = 0.0 - self._variables_bempp["cyl_gap"]
+                zmax = self._length + self._variables_bempp["cyl_gap"]
+                rmax = self._variables_bempp["cyl_id"] / 2.0
+                
+                cyl_gmsh_str = """Geometry.NumSubEdges = 100; // nicer display of curve
+Mesh.CharacteristicLengthMax = {};
+h = {};
+rmax = {};
+zmin = {};
+zmax = {};
+len = zmax - zmin;
+
+""".format(0.025, 0.025, rmax, zmin, zmax) # TODO: Make this a variable (mesh size)
+                cyl_gmsh_str += """Point(1) = { 0, 0, zmin, h };
+
+Point(2) = {rmax,0,zmin,h};
+Point(3) = {0,rmax,zmin,h};
+Point(4) = {-rmax,0,zmin,h};
+Point(5) = {0,-rmax,zmin,h};
+
+Circle(1) = {2,1,3};
+Circle(2) = {3,1,4};
+Circle(3) = {4,1,5};
+Circle(4) = {5,1,2};
+
+Line Loop(5) = {1,2,3,4};
+Plane Surface(6) = {5};
+
+out[] = Extrude{0, 0, len} { Surface {6}; };
+
+Physical Surface(0) = {6, out[]};
+
+"""
+                # noinspection PyCallingNonCallable
+                with open("cyl_str.geo", "w") as of:
+                    of.write(cyl_gmsh_str)
+                mesh = generate_from_string(cyl_gmsh_str)
+
+                _vertices = mesh.leaf_view.vertices
+                _elements = mesh.leaf_view.elements
+                _domain_ids = mesh.leaf_view.domain_indices
+
+                vertices = np.concatenate((vertices, _vertices), axis=1)
+                elements = np.concatenate((elements, _elements + vertex_counter), axis=1)
+                domains = np.concatenate((domains, _domain_ids), axis=0)                
+                
             mpi_data = {"vert": vertices,
                         "elem": elements,
                         "doma": domains} 
@@ -1407,7 +1463,7 @@ class PyRFQ(object):
         dp0_space = bempp.api.function_space(self._full_mesh, "DP", 0)
         slp = bempp.api.operators.boundary.laplace.single_layer(dp0_space, dp0_space, dp0_space)
 
-        domain_mapping = {}
+        domain_mapping = {0: 0}  # 0 is grounded by default
         for vane in self._vanes:
             domain_mapping[vane.domain_idx] = vane.voltage
 
@@ -1433,21 +1489,49 @@ class PyRFQ(object):
         # self._variables_bempp["grid_fun"] = dirichlet_fun
 
         # Quick test: plot potential across RFQ center
-        _x = np.linspace(-0.04, 0.04, 100)
-        _y = np.linspace(-0.04, 0.04, 100)
-        mesh = np.meshgrid(_x, _y, 0.5, indexing='ij')  # type: np.ndarray
-        grid_pts = np.vstack([_mesh.ravel() for _mesh in mesh])
-        sl_pot = bempp.api.operators.potential.laplace.single_layer(dp0_space, grid_pts)
-        _pot = sl_pot * sol
-        _pot = _pot.reshape([100, 100])
-        plt.imshow(_pot.T, extent=(-0.04, 0.04, -0.04, 0.04))
-        plt.xlabel("x (m)")
-        plt.ylabel("y (m)")
-        plt.title("Potential (V)")
-        plt.colorbar()
-        plt.show()
+        # numpoints = 201
+        # _x = np.linspace(-0.04, 0.04, numpoints)
+        # _y = np.linspace(-0.04, 0.04, numpoints)
+        # mesh = np.meshgrid(_x, _y, 0.5, indexing='ij')  # type: np.ndarray
+        # grid_pts = np.vstack([_mesh.ravel() for _mesh in mesh])
+        # sl_pot = bempp.api.operators.potential.laplace.single_layer(dp0_space, grid_pts)
+        # _pot = sl_pot * sol
+        # _pot = _pot.reshape([numpoints, numpoints])
 
-        exit()
+        # Apply mask where electrodes are (TEMP!!!)
+        # import numpy.ma as ma
+        # epsilon = 0.012 * self._voltage
+        # masked_pot = ma.masked_array(_pot, mask=(np.abs(_pot) >= (self._voltage-epsilon)))
+
+        # dx = 0.08 / (numpoints - 1)
+        
+        # ex, ey = np.gradient(masked_pot, dx, dx)
+
+        # plt.imshow(masked_pot.T, extent=(-0.04, 0.04, -0.04, 0.04))
+        # plt.xlabel("x (m)")
+        # plt.ylabel("y (m)")
+        # plt.title("Potential (V)")
+        # plt.colorbar()
+        # plt.show()
+
+        # plt.imshow(ex.T, extent=(-0.04, 0.04, -0.04, 0.04))
+        # plt.xlabel("x (m)")
+        # plt.ylabel("y (m)")
+        # plt.title("E_x (V/m)")
+        # plt.colorbar()
+        # plt.show()
+
+        # plt.imshow(ey.T, extent=(-0.04, 0.04, -0.04, 0.04))
+        # plt.xlabel("x (m)")
+        # plt.ylabel("y (m)")
+        # plt.title("E_y (V/m)")
+        # plt.colorbar()
+        # plt.show()
+
+        # plt.quiver(mesh[0].flatten(), mesh[1].flatten(), ex.flatten(), ey.flatten(), scale=None)
+        # plt.show()
+        
+        # exit()
 
         return 0
 
@@ -1917,6 +2001,7 @@ if __name__ == "__main__":
     
     print("Generating full mesh for BEM++")
     ts = time.time()
+    # myrfq._variables_bempp["add_cyl"] = True  # TODO: Write functions to get and set variables (bempp and other)
     myrfq.generate_full_mesh()
     print("Meshing took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
     
@@ -1932,13 +2017,31 @@ if __name__ == "__main__":
     print("Calculating E-Field")
     ts = time.time()
     myres = [0.002, 0.002, 0.002]
-    limit = 0.007
-    myrfq.calculate_efield(limits=((-limit, limit), (-limit, limit), (-0.1, 1.35)),
-                           res=myres,
-                           domain_decomp=(1, 1, 50),
-                           overlap=0)
+    limit = 0.015
+    mypot = myrfq.calculate_efield(limits=((-limit, limit), (-limit, limit), (-0.1, 1.35)),
+                                   res=myres,
+                                   domain_decomp=(1, 1, 50),
+                                   overlap=0,
+                                   phi_only=True)
     print("E-Field took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
+    import pickle
+    with open("pot_out.field", "wb") as outfile:
+        pickle.dump(mypot, outfile)
+        
+    import numpy.ma as ma
+    epsilon = 0.012 * 22000
+    masked_pot = ma.masked_array(mypot, mask=(np.abs(mypot) >= (22000-epsilon)))
+    
+    plt.imshow(masked_pot[int(0.5*pot.shape[0]), :, :].T, extent=(-0.1, 1.35, -0.015, 0.015))
+    plt.xlabel("x (m)")
+    plt.ylabel("y (m)")
+    plt.title("Potential (V)")
+    plt.colorbar()
+    plt.show()
+
+    exit()
+    
     if rank == 0:
         myrfq.plot_combo(xypos=0.005, xyscale=1.0, zlim=(-0.1, 1.35))
 
