@@ -1,4 +1,5 @@
-from dans_pymodules import *
+import numpy as np
+import scipy.constants as const
 from multiprocessing import Pool
 from scipy.interpolate import interp1d, UnivariateSpline
 # from scipy import meshgrid
@@ -12,7 +13,7 @@ import matplotlib.pyplot as plt
 import gc
 import datetime
 
-# import time
+import time
 try:
     import bempp.api
     from bempp.api.shapes.shapes import __generate_grid_from_geo_string as generate_from_string
@@ -21,9 +22,28 @@ except ImportError:
     bempp = None
     generate_from_string = None
 
-np.set_printoptions(threshold=10000)
-colors = MyColors()
+try:
+    from mpi4py import MPI
+except ImportError:
+    print("Could not import mpi4py!")
+    exit()
 
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
+host = MPI.Get_processor_name()
+
+print("Process {} of {} on host {} started!".format(rank, size, host))
+
+np.set_printoptions(threshold=10000)
+
+# For now, everything involving the pymodules with be done on master proc (rank 0)
+if rank == 0:
+    from dans_pymodules import *
+    colors = MyColors()
+else:
+    colors = None
+    
 decimals = 12
 
 __author__ = "Daniel Winklehner, Siddhartha Dechoudhury"
@@ -384,7 +404,7 @@ class PyRFQVane(object):
                              "h": 0.005,  # gmsh meshing parameter (m)
                              "tip": "semi-circle",
                              "r_tip": 0.005,  # Radius of curvature of vane tip (m)
-                             "h_block": 0.001,  # height of block sitting atop the curvature (m)
+                             "h_block": 0.01,  # height of block sitting atop the curvature (m)
                              "symmetry": False,
                              "mirror": False,
                              "domain_idx": None,
@@ -933,7 +953,8 @@ class PyRFQ(object):
                                  "f_space": None,
                                  "operator": None,
                                  "grid_fun": None,
-                                 "ef_itp": None,  type: Field
+                                 "ef_itp": None,  # type: Field
+                                 "ef_pot": None
                                  }
 
         self._variables_inventor = {"vane_type": "hybrid",
@@ -994,12 +1015,25 @@ class PyRFQ(object):
         """
 
         if filename is None:
-            fd = FileDialog()
-            filename = fd.get_filename('open')
+            if rank == 0:
+                # print("Process {} getting filename from dialog".format(rank))
+                # from dans_pymodules import FileDialog
+                fd = FileDialog()
+                filename = fd.get_filename('open')
+                data = {"fn": filename}
+                #req = comm.isend({'fn':filename}, dest=1, tag=11)
+                #req.wait()
+            else:
+                #req = comm.irecv(source=0, tag=11)
+                data = None
+                #print("Process {} received filename {}.".format(rank, data["fn"]))
 
+        data = comm.bcast(data, root=0)
+        filename = data["fn"]
+                
         if filename is None:
             return 1
-
+        
         with open(filename, "r") as infile:
             if "Parmteqm" in infile.readline():
                 # Detected Parmteqm file
@@ -1093,6 +1127,8 @@ class PyRFQ(object):
 
                 if params[4] == 1.0:
                     cell_type = "RMS"
+                    if ignore_rms:
+                        continue
                 else:
                     cell_type = "NCS"
 
@@ -1121,10 +1157,16 @@ class PyRFQ(object):
                          limits=((None, None), (None, None), (None, None)),
                          res=(0.002, 0.002, 0.002),
                          domain_decomp=(4, 4, 4),
-                         overlap=0):
+                         overlap=0,
+                         phi_only=False):
         """
         Calculates the E-Field from the BEM++ solution using the user defined cube or
         the cube corresponding to the cyclindrical outer boundary.
+
+        TODO: This function is not very MPI aware and could be optimized!
+        TODO: BEMPP uses all available processors on the node to calculate the potential.
+        TODO: But if we run on multiple nodes, we could partition the domains.
+
         :param limits: tuple, list or np.ndarray of shape (3, 2)
                        containing xmin, xmax, ymin, ymax, zmin, zmax
                        use None to use the individual limit from the electrode system.
@@ -1144,7 +1186,6 @@ class PyRFQ(object):
                   "Must be ((xmin, xmax), (ymin, ymax), (zmin, zmax)) = (3, 2).".format(limits.shape))
             return 1
 
-        # TODO: If solution and function space are saved to a temp folder, this could be done in parallel too maybe.
         sol = self._variables_bempp["solution"]
         fsp = self._variables_bempp["f_space"]
 
@@ -1164,7 +1205,7 @@ class PyRFQ(object):
         limits[np.where(limits is None)] = limits_elec[np.where(limits is None)]
 
         res = np.array([res]).ravel()
-        _n = np.array((limits[:, 1] - limits[:, 0]) / res, int)
+        _n = np.array((limits[:, 1] - limits[:, 0]) / res, int) + 1
 
         # Recalculate resolution to match integer n's
         _d = (limits[:, 1] - limits[:, 0]) / _n
@@ -1194,7 +1235,7 @@ class PyRFQ(object):
                   "Domain decomposition {}:".format(np.product(domain_decomp), domain_decomp))
 
             for i, dirs in enumerate(["x", "y", "z"]):
-                print("{}: Indices {} to {}".format(dirs, start_idxs[i], end_idxs[i]))
+                print("{}: Indices {} to {}".format(dirs, start_idxs[i], end_idxs[i]-1))
 
         # Iterate over all the dimensions, calculate the subset of e-field
         domain_idx = 1
@@ -1207,7 +1248,9 @@ class PyRFQ(object):
                               "Index Limits: x = ({}, {}), "
                               "y = ({}, {}), "
                               "z = ({}, {})".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - _ts))),
-                                                    domain_idx, np.product(domain_decomp), x1, x2, y1, y2, z1, z2))
+                                                    domain_idx,
+                                                    np.product(domain_decomp),
+                                                    x1, x2-1, y1, y2-1, z1, z2-1))
 
                     grid_pts = np.vstack([_mesh[x1:x2, y1:y2, z1:z2].ravel() for _mesh in mesh])
 
@@ -1221,33 +1264,54 @@ class PyRFQ(object):
                     del sl_pot
                     del _pot
 
+        self._variables_bempp["ef_phi"] = pot
+
+        if phi_only:
+            return pot
+
         ex, ey, ez = np.gradient(pot, _d[X], _d[Y], _d[Z])
 
         del pot
         gc.collect()
 
-        self._variables_bempp["ef_itp"] = Field("Spiral Inflector E-Field",
-                                                dim=3,
-                                                field={"x": RegularGridInterpolator(points=_r, values=-ex,
-                                                                                    bounds_error=False, fill_value=0.0),
-                                                       "y": RegularGridInterpolator(points=_r, values=-ey,
-                                                                                    bounds_error=False, fill_value=0.0),
-                                                       "z": RegularGridInterpolator(points=_r, values=-ez,
-                                                                                    bounds_error=False, fill_value=0.0)
-                                                       })
+        if rank == 0:
+            # from dans_pymodules import Field
+            _field = Field("RFQ E-Field",
+                           dim=3,
+                           field={"x": RegularGridInterpolator(points=_r, values=-ex,
+                                                               bounds_error=False, fill_value=0.0),
+                                  "y": RegularGridInterpolator(points=_r, values=-ey,
+                                                               bounds_error=False, fill_value=0.0),
+                                  "z": RegularGridInterpolator(points=_r, values=-ez,
+                                                               bounds_error=False, fill_value=0.0)
+                                  })
 
+            mpi_data = {"efield": _field}
+        else:
+            mpi_data = None
+
+        mpi_data = comm.bcast(mpi_data, root=0)
+
+        self._variables_bempp["ef_itp"] = mpi_data["efield"]
+        
         return 0
 
-    def plot_combo(self, xypos=0.000, xyscale=1.0):
+    def plot_combo(self, xypos=0.000, xyscale=1.0, zlim=None):
 
         assert self._variables_bempp["ef_itp"] is not None, "No E-Field calculated yet!"
 
         numpts = 5000
 
+        if zlim is None:
+            zmin = np.min(self._variables_bempp["rf_itp"]._field["z"].grid[2])
+            zmax = np.min(self._variables_bempp["rf_itp"]._field["z"].grid[2])
+        else:
+            zmin, zmax = zlim
+            
         # Bz of z at x = y = 0
         x = np.zeros(numpts)
         y = np.zeros(numpts)
-        z = np.linspace(0.0, 1.67, numpts)
+        z = np.linspace(zmin, zmax, numpts)
 
         points = np.vstack([x, y, z]).T
 
@@ -1295,26 +1359,42 @@ class PyRFQ(object):
         vertex_counter = 0
         domains = np.zeros([0], int)
 
-        for _vane in self._vanes:
+        # For now, do this only on the first node
+        if rank == 0:
+        
+            for _vane in self._vanes:
 
-            # noinspection PyCallingNonCallable
-            mesh = generate_from_string(_vane.get_parameter("gmsh_str"))
+                # noinspection PyCallingNonCallable
+                mesh = generate_from_string(_vane.get_parameter("gmsh_str"))
 
-            _vertices = mesh.leaf_view.vertices
-            _elements = mesh.leaf_view.elements
-            _domain_ids = mesh.leaf_view.domain_indices
+                _vertices = mesh.leaf_view.vertices
+                _elements = mesh.leaf_view.elements
+                _domain_ids = mesh.leaf_view.domain_indices
 
-            vertices = np.concatenate((vertices, _vertices), axis=1)
-            elements = np.concatenate((elements, _elements + vertex_counter), axis=1)
-            domains = np.concatenate((domains, _domain_ids), axis=0)
+                vertices = np.concatenate((vertices, _vertices), axis=1)
+                elements = np.concatenate((elements, _elements + vertex_counter), axis=1)
+                domains = np.concatenate((domains, _domain_ids), axis=0)
 
-            # Increase the running counters
-            vertex_counter += _vertices.shape[1]
+                # Increase the running counters
+                vertex_counter += _vertices.shape[1]
 
-        self._full_mesh = bempp.api.grid.grid_from_element_data(vertices, elements, domains)
+            mpi_data = {"vert": vertices,
+                        "elem": elements,
+                        "doma": domains} 
+
+        else:
+
+            mpi_data = None
+
+        mpi_data = comm.bcast(mpi_data, root=0)
+            
+        self._full_mesh = bempp.api.grid.grid_from_element_data(mpi_data["vert"],
+                                                                mpi_data["elem"],
+                                                                mpi_data["doma"])
 
         if self._debug:
-            self._full_mesh.plot()
+            if rank == 0:
+                self._full_mesh.plot()
 
         return 0
 
@@ -1339,7 +1419,9 @@ class PyRFQ(object):
         dirichlet_fun = bempp.api.GridFunction(dp0_space, fun=f)
 
         if self._debug:
-            dirichlet_fun.plot()
+            if rank == 0:
+                dirichlet_fun.plot()
+                bempp.api.export(grid_function=dirichlet_fun, file_name="dirichlet_func.msh")
 
         # Solve
         sol, info = bempp.api.linalg.gmres(slp, dirichlet_fun, tol=1e-5, use_strong_form=True)
@@ -1351,19 +1433,21 @@ class PyRFQ(object):
         # self._variables_bempp["grid_fun"] = dirichlet_fun
 
         # Quick test: plot potential across RFQ center
-        # _x = np.linspace(-0.04, 0.04, 100)
-        # _y = np.linspace(-0.04, 0.04, 100)
-        # mesh = np.meshgrid(_x, _y, 0.5, indexing='ij')  # type: np.ndarray
-        # grid_pts = np.vstack([_mesh.ravel() for _mesh in mesh])
-        # sl_pot = bempp.api.operators.potential.laplace.single_layer(dp0_space, grid_pts)
-        # _pot = sl_pot * sol
-        # _pot = _pot.reshape([100, 100])
-        # plt.imshow(_pot.T, extent=(-0.04, 0.04, -0.04, 0.04))
-        # plt.xlabel("x (m)")
-        # plt.ylabel("y (m)")
-        # plt.title("Potential (V)")
-        # plt.colorbar()
-        # plt.show()
+        _x = np.linspace(-0.04, 0.04, 100)
+        _y = np.linspace(-0.04, 0.04, 100)
+        mesh = np.meshgrid(_x, _y, 0.5, indexing='ij')  # type: np.ndarray
+        grid_pts = np.vstack([_mesh.ravel() for _mesh in mesh])
+        sl_pot = bempp.api.operators.potential.laplace.single_layer(dp0_space, grid_pts)
+        _pot = sl_pot * sol
+        _pot = _pot.reshape([100, 100])
+        plt.imshow(_pot.T, extent=(-0.04, 0.04, -0.04, 0.04))
+        plt.xlabel("x (m)")
+        plt.ylabel("y (m)")
+        plt.title("Potential (V)")
+        plt.colorbar()
+        plt.show()
+
+        exit()
 
         return 0
 
@@ -1397,7 +1481,7 @@ class PyRFQ(object):
     def generate_vanes_worker(vane):
 
         vane.calculate_profile(fudge=True)
-        vane.generate_gmsh_str(dx=0.005, h=0.005,  # TODO: all these params should be user-settable
+        vane.generate_gmsh_str(dx=0.002, h=0.002,  # TODO: all these params should be user-settable
                                symmetry=False, mirror=True)
         # vane.generate_gmsh_str(dx=0.002, h=0.002,  # TODO: all these params should be user-settable
         #                        symmetry=False, mirror=True)
@@ -1432,48 +1516,6 @@ class PyRFQ(object):
             print("RFQ Cell {}: ".format(number + 1), cell)
 
         return 0
-
-    def track(self, ion, r_start=None, v_start=None, nsteps=10000, dt=1e-12):
-
-        # TODO: For now break if r_start or v_start are not given, later get from class properties?
-        assert(r_start is not None and v_start is not None), "Have to specify r_start and v_start for now!"
-        assert isinstance(ion, IonSpecies), "ion has to be an IonSpecies object!"
-
-        if self._variables_bempp["ef_itp"] is None:
-            print("No E-Field has been generated. Cannot track!")
-            return 1
-
-        pusher = ParticlePusher(ion, "boris")  # Note: leapfrog is inaccurate above dt = 1e-12
-
-        efield1 = self._variables_bempp["ef_itp"]  # type: Field
-        bfield1 = Field(dim=0, field={"x": 0.0, "y": 0.0, "z": 0.0})
-
-        _r = np.zeros([nsteps + 1, 3])
-        _v = np.zeros([nsteps + 1, 3])
-        _r[0, :] = r_start[:]
-        _v[0, :] = v_start[:]
-
-        # initialize the velocity half a step back:
-        ef = efield1(_r[0])
-        bf = bfield1(_r[0])
-
-        _, _v[0] = pusher.push(_r[0], _v[0], ef, bf, -0.5 * dt)
-
-        t = 0.0
-        freq = 32.8e6
-        phi = 0.0
-
-        # Track for n steps
-        for i in range(nsteps):
-
-            ef = np.cos(2.0 * np.pi * t * freq + phi) * efield1(_r[i])
-            bf = np.cos(2.0 * np.pi * t * freq + phi) * bfield1(_r[i])
-
-            _r[i + 1], _v[i + 1] = pusher.push(_r[i], _v[i], ef, bf, dt)
-
-            t += dt
-
-        return _r, _v
 
     def write_inventor_macro(self,
                              save_folder=None,
@@ -1858,65 +1900,50 @@ if __name__ == "__main__":
     #                   length=0.01828769716079613)
 
     print(myrfq)
-
+    
     print("Generating vanes")
     ts = time.time()
     myrfq.generate_vanes()
     print("Generating vanes took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
-    myrfq.plot_vane_profile()
-    myrfq.write_inventor_macro(vane_type='vane',
-                               vane_radius=0.005,
-                               vane_height=0.15,
-                               vane_height_type='absolute',
-                               nz=600)
-    exit()
-
+    # if rank == 0:
+    #     myrfq.plot_vane_profile()
+    #     myrfq.write_inventor_macro(vane_type='vane',
+    #                                vane_radius=0.005,
+    #                                vane_height=0.15,
+    #                                vane_height_type='absolute',
+    #                                nz=600)
+    # exit()
+    
     print("Generating full mesh for BEM++")
     ts = time.time()
     myrfq.generate_full_mesh()
     print("Meshing took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
-
+    
     # input("Hit enter to continue...")
 
     print("Solving BEM++ problem")
     ts = time.time()
     myrfq.solve_bempp()
     print("Solving BEM++ took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
-
+    
     # input("Hit enter to continue...")
 
     print("Calculating E-Field")
     ts = time.time()
-    myres = [0.001, 0.001, 0.003]
-    limit = 5.0 * myres[0]
-    myrfq.calculate_efield(limits=((-limit, limit), (-limit, limit), (0.0, 1.67)),
+    myres = [0.002, 0.002, 0.002]
+    limit = 0.007
+    myrfq.calculate_efield(limits=((-limit, limit), (-limit, limit), (-0.1, 1.35)),
                            res=myres,
                            domain_decomp=(1, 1, 50),
                            overlap=0)
     print("E-Field took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
-    # ts = time.time()
-    # h2p = IonSpecies("H2_1+", 1.0)
-    # h2p.calculate_from_energy_mev(0.015 / h2p.a())
-    #
-    # npart = 40
-    # steps = 11000
-    #
-    # zs = np.linspace(-0.04, 0.0, npart)
-    # r = np.zeros([npart, steps + 1, 3])
-    # v = np.zeros([npart, steps + 1, 3])
-    #
-    # # TODO: Make tracking multiproc
-    # for _i, _zs in enumerate(zs):
-    #     print("Tracking particle {}".format(_i))
-    #     r[_i, :, :], v[_i, :, :] = myrfq.track(ion=h2p,
-    #                                            r_start=np.array([0.0, 0.0, _zs]),
-    #                                            v_start=np.array([0.0, 0.0, h2p.v_m_per_s()]),
-    #                                            nsteps=steps,
-    #                                            dt=1e-10)
-    #
-    # print("Tracking took {:.4f} s".format(time.time() - ts))
+    if rank == 0:
+        myrfq.plot_combo(xypos=0.005, xyscale=1.0, zlim=(-0.1, 1.35))
 
-    myrfq.plot_combo(xypos=myres[0], xyscale=1.0)
+    import pickle
+    with open("efield_out.field", "wb") as outfile:
+        pickle.dump(myrfq._variables_bempp["ef_itp"], outfile)
+        
     # myrfq.plot_vane_profile()
