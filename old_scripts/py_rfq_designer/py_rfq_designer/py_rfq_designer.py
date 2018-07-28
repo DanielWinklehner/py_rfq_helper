@@ -9,7 +9,7 @@ from scipy.optimize import root
 # import scipy.constants as const
 # import numpy as np
 # import platform
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import gc
 import datetime
 
@@ -39,12 +39,12 @@ print("Process {} of {} on host {} started!".format(rank, size, host))
 np.set_printoptions(threshold=10000)
 
 # For now, everything involving the pymodules with be done on master proc (rank 0)
-if rank == 0:
-    from dans_pymodules import *
+# if rank == 0:
+#     from dans_pymodules import *
 
-    colors = MyColors()
-else:
-    colors = None
+#     colors = MyColors()
+# else:
+#     colors = None
 
 decimals = 12
 
@@ -1038,8 +1038,8 @@ class PyRFQ(object):
                 data = None
                 # print("Process {} received filename {}.".format(rank, data["fn"]))
 
-        data = comm.bcast(data, root=0)
-        filename = data["fn"]
+            data = comm.bcast(data, root=0)
+            filename = data["fn"]
 
         if filename is None:
             return 1
@@ -1881,7 +1881,7 @@ End Sub
 
 if __name__ == "__main__":
 
-    myrfq = PyRFQ(voltage=22000.0, debug=True)
+    myrfq = PyRFQ(voltage=22000.0, debug=False)
 
     # myrfq.append_cell(cell_type="STA",
     #                   aperture=0.15,
@@ -1889,7 +1889,7 @@ if __name__ == "__main__":
     #                   length=0.0)
 
     # Load the base RFQ design from the parmteq file
-    if myrfq.add_cells_from_file(ignore_rms=True) == 1:
+    if myrfq.add_cells_from_file(filename="PARMTEQOUT.TXT", ignore_rms=True) == 1:
         exit()
 
     myrfq.append_cell(cell_type="TCS",
