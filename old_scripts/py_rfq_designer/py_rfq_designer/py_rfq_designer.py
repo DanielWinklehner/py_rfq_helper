@@ -1507,6 +1507,8 @@ Circle(4) = {5,1,2};
 Line Loop(5) = {1,2,3,4};
 Plane Surface(6) = {5};
 
+entrance_plate[] = Extrude{0, 0, -0.005} { Surface {6}; };
+
 Point(6) = { 0, 0, zmax, h };
 Point(7) = {rmax,0,zmax,h};
 Point(8) = {0,rmax,zmax,h};
@@ -1521,7 +1523,9 @@ Circle(10) = {10,6,7};
 Line Loop(11) = {-7,-8,-9,-10};
 Plane Surface(12) = {11};
 
-Physical Surface(100) = {6, 12};
+exit_plate[] = Extrude{0, 0, 0.005} { Surface {12}; };
+
+Physical Surface(100) = {6, 12, entrance_plate[], exit_plate[]};
 """
                 # noinspection PyCallingNonCallable
                 if self._debug:
