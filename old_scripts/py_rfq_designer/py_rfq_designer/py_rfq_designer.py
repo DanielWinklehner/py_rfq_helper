@@ -967,11 +967,14 @@ class PyRFQ(object):
                                  "f_space": None,
                                  "operator": None,
                                  "grid_fun": None,
+                                 "grid_res": 0.005,  # grid resolution in (m)
                                  "ef_itp": None,  # type: Field
                                  "ef_phi": None,  # type: np.ndarray
-                                 # TODO: Should put pot in it's own class that also holds dx, nx, etc.
+                                 "pot_shift": 0.0,  # Shift all potentials by this value (and the solution back)
+                                                    # This can help with jitter on z axis where pot ~ 0 otherwise
+                                 # TODO: Should put pot in its own class that also holds dx, nx, etc.
                                  "add_cyl": False,  # Do we want to add a grounded cylinder to the BEMPP problem
-                                 "add_endplates": False,
+                                 "add_endplates": False,  # Or just grounded end plates
                                  "cyl_id": 0.2,  # Inner diameter of surrounding cylinder
                                  "cyl_gap": 0.01  # gap between vanes and cylinder TODO: Maybe make this asymmetric?
                                  }
@@ -992,6 +995,32 @@ class PyRFQ(object):
             text += "Cell {}: ".format(i) + cell.__str__() + "\n"
 
         return text
+
+    def set_bempp_parameter(self, keyword=None, value=None):
+
+        if keyword is None or value is None:
+            print("In 'set_bempp_parameter': Either keyword or value were not specified.")
+            return 1
+
+        if keyword not in self._variables_bempp.keys():
+            print("In 'set_bempp_parameter': Unrecognized keyword '{}'.".format(keyword))
+            return 1
+
+        self._variables_bempp[keyword] = value
+
+        return 0
+
+    def get_bempp_parameter(self, keyword=None):
+
+        if keyword is None or value is None:
+            print("In 'set_bempp_parameter': Either keyword or value were not specified.")
+            return 1
+
+        if keyword not in self._variables_bempp.keys():
+            print("In 'set_bempp_parameter': Unrecognized keyword '{}'.".format(keyword))
+            return 1
+
+        return self._variables_bempp[keyword]
 
     def append_cell(self,
                     cell_type,
@@ -1636,14 +1665,13 @@ Physical Surface(0) = {6, 12};
 
         return 0
 
-    @staticmethod
-    def generate_vanes_worker(vane):
+    def generate_vanes_worker(self, vane):
+
+        dx_h = self._variables_bempp["grid_res"]  # TODO: Is there a reason to set them to different values?
 
         vane.calculate_profile(fudge=True)
-        vane.generate_gmsh_str(dx=0.002, h=0.002,  # TODO: all these params should be user-settable
+        vane.generate_gmsh_str(dx=dx_h, h=dx_h,
                                symmetry=False, mirror=True)
-        # vane.generate_gmsh_str(dx=0.002, h=0.002,  # TODO: all these params should be user-settable
-        #                        symmetry=False, mirror=True)
 
         return vane
 
@@ -2057,6 +2085,10 @@ if __name__ == "__main__":
     #                   modulation=0.038802 / 0.02919376887767351,
     #                   length=0.01828769716079613)
 
+    myrfq.set_bempp_parameter("add_endplates", True)
+    myrfq.set_bempp_parameter("cyl_id", 0.1)
+    myrfq.set_bempp_parameter("grid_res", 0.005)
+
     print(myrfq)
 
     print("Generating vanes")
@@ -2075,8 +2107,6 @@ if __name__ == "__main__":
 
     print("Generating full mesh for BEMPP")
     ts = time.time()
-    myrfq._variables_bempp["add_endplates"] = True  # TODO: Write functions to get and set variables (bempp and other)
-    myrfq._variables_bempp["cyl_id"] = 0.1
     myrfq.generate_full_mesh()
     print("Meshing took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
@@ -2091,11 +2121,11 @@ if __name__ == "__main__":
 
     print("Calculating Potential")
     ts = time.time()
-    myres = [0.001, 0.001, 0.001]
+    myres = [0.002, 0.002, 0.002]
     limit = 0.02
     myrfq.calculate_potential(limits=((-limit, limit), (-limit, limit), (-0.1, 1.35)),
                               res=myres,
-                              domain_decomp=(2, 2, 50),
+                              domain_decomp=(1, 1, 50),
                               overlap=0)
     print("Potential took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
