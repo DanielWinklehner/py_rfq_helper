@@ -1460,7 +1460,7 @@ Plane Surface(6) = {5};
 
 out[] = Extrude{0, 0, len} { Surface {6}; };
 
-Physical Surface(0) = {6, out[]};
+Physical Surface(100) = {6, out[]};
 
 """
                 # noinspection PyCallingNonCallable
@@ -1521,7 +1521,7 @@ Circle(10) = {10,6,7};
 Line Loop(11) = {-7,-8,-9,-10};
 Plane Surface(12) = {11};
 
-Physical Surface(0) = {6, 12};
+Physical Surface(100) = {6, 12};
 """
                 # noinspection PyCallingNonCallable
                 if self._debug:
@@ -1567,7 +1567,7 @@ Physical Surface(0) = {6, 12};
         dp0_space = bempp.api.function_space(self._full_mesh, "DP", 0)
         slp = bempp.api.operators.boundary.laplace.single_layer(dp0_space, dp0_space, dp0_space)
 
-        domain_mapping = {0: 0.0 + 3.0 * self._voltage}  # 0 is grounded by default
+        domain_mapping = {100: self._variables_bempp["pot_shift"]}  # 100 is ground
         for vane in self._vanes:
             domain_mapping[vane.domain_idx] = vane.voltage
 
@@ -1649,14 +1649,14 @@ Physical Surface(0) = {6, 12};
         for vane_type in ["yp"]:
             self._vanes.append(PyRFQVane(vane_type=vane_type,
                                          cells=self._cells,
-                                         voltage=self._voltage + 3.0 * self._voltage,
+                                         voltage=self._voltage + self._variables_bempp["pot_shift"],
                                          debug=self._debug))
 
         # for vane_type in ["xp", "xm"]:
         for vane_type in ["xp"]:
             self._vanes.append(PyRFQVane(vane_type=vane_type,
                                          cells=self._cells,
-                                         voltage=-self._voltage + 3.0 * self._voltage,
+                                         voltage=-self._voltage + self._variables_bempp["pot_shift"],
                                          debug=self._debug))
 
         # Generate the two vanes in parallel:
