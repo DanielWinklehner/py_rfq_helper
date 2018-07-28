@@ -1509,23 +1509,23 @@ Plane Surface(6) = {5};
 
 entrance_plate[] = Extrude{0, 0, -0.005} { Surface {6}; };
 
-Point(6) = { 0, 0, zmax, h };
-Point(7) = {rmax,0,zmax,h};
-Point(8) = {0,rmax,zmax,h};
-Point(9) = {-rmax,0,zmax,h};
-Point(10) = {0,-rmax,zmax,h};
+Point(106) = { 0, 0, zmax, h };
+Point(107) = {rmax,0,zmax,h};
+Point(108) = {0,rmax,zmax,h};
+Point(109) = {-rmax,0,zmax,h};
+Point(110) = {0,-rmax,zmax,h};
 
-Circle(7) = {7,6,8};
-Circle(8) = {8,6,9};
-Circle(9) = {9,6,10};
-Circle(10) = {10,6,7};
+Circle(107) = {107,106,108};
+Circle(108) = {108,106,109};
+Circle(109) = {109,106,110};
+Circle(110) = {110,106,107};
 
-Line Loop(11) = {-7,-8,-9,-10};
-Plane Surface(12) = {11};
+Line Loop(111) = {-107,-108,-109,-110};
+Plane Surface(112) = {111};
 
-exit_plate[] = Extrude{0, 0, 0.005} { Surface {12}; };
+exit_plate[] = Extrude{0, 0, 0.005} { Surface {112}; };
 
-Physical Surface(100) = {6, 12, entrance_plate[], exit_plate[]};
+Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
 """
                 # noinspection PyCallingNonCallable
                 if self._debug:
