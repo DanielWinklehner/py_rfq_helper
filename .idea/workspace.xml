@@ -2,9 +2,8 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="893598d8-1f00-4f45-8d5c-6ad7651fe8a7" name="Default" comment="">
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py" beforeDir="false" afterPath="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/read_plot_pot.py" beforeDir="false" afterPath="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/read_plot_pot.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="TRACKING_ENABLED" value="true" />
@@ -51,11 +50,20 @@
   </component>
   <component name="FileEditorManager">
     <leaf SIDE_TABS_SIZE_LIMIT_KEY="300">
-      <file leaf-file-name="py_rfq_designer.py" pinned="false" current-in-tab="true">
+      <file leaf-file-name="py_rfq_designer.py" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="574">
-              <caret line="1501" lean-forward="true" selection-start-line="1501" selection-end-line="1501" />
+            <state relative-caret-position="354">
+              <caret line="1490" lean-forward="true" selection-start-line="1490" selection-end-line="1490" />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name=".gitignore" pinned="false" current-in-tab="true">
+        <entry file="file://$PROJECT_DIR$/.gitignore">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="328">
+              <caret line="111" column="2" selection-start-line="111" selection-start-column="2" selection-end-line="111" selection-end-column="2" />
             </state>
           </provider>
         </entry>
@@ -107,6 +115,7 @@
         <option value="$PROJECT_DIR$/temp" />
         <option value="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/read_plot_pot.py" />
         <option value="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py" />
+        <option value="$PROJECT_DIR$/.gitignore" />
       </list>
     </option>
   </component>
@@ -127,24 +136,6 @@
             <path>
               <item name="py_rfq_helper" type="b2602c69:ProjectViewProjectNode" />
               <item name="py_rfq_helper" type="462c0819:PsiDirectoryNode" />
-            </path>
-            <path>
-              <item name="py_rfq_helper" type="b2602c69:ProjectViewProjectNode" />
-              <item name="py_rfq_helper" type="462c0819:PsiDirectoryNode" />
-              <item name="old_scripts" type="462c0819:PsiDirectoryNode" />
-            </path>
-            <path>
-              <item name="py_rfq_helper" type="b2602c69:ProjectViewProjectNode" />
-              <item name="py_rfq_helper" type="462c0819:PsiDirectoryNode" />
-              <item name="old_scripts" type="462c0819:PsiDirectoryNode" />
-              <item name="py_rfq_designer" type="462c0819:PsiDirectoryNode" />
-            </path>
-            <path>
-              <item name="py_rfq_helper" type="b2602c69:ProjectViewProjectNode" />
-              <item name="py_rfq_helper" type="462c0819:PsiDirectoryNode" />
-              <item name="old_scripts" type="462c0819:PsiDirectoryNode" />
-              <item name="py_rfq_designer" type="462c0819:PsiDirectoryNode" />
-              <item name="py_rfq_designer" type="462c0819:PsiDirectoryNode" />
             </path>
           </expand>
           <select />
@@ -280,7 +271,14 @@
       <option name="project" value="LOCAL" />
       <updated>1532787108615</updated>
     </task>
-    <option name="localTasksCounter" value="8" />
+    <task id="LOCAL-00008" summary="add 'end plates only' option -DW">
+      <created>1532793597669</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1532793597669</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="TodoView">
@@ -294,15 +292,14 @@
   </component>
   <component name="ToolWindowManager">
     <frame x="-7" y="-7" width="1550" height="838" extended-state="6" />
-    <editor active="true" />
     <layout>
-      <window_info content_ui="combo" id="Project" order="0" sideWeight="0.505698" visible="true" weight="0.23595506" />
+      <window_info active="true" content_ui="combo" id="Project" order="0" sideWeight="0.50528544" visible="true" weight="0.23595506" />
       <window_info anchor="bottom" id="TODO" order="6" weight="0.3286334" />
       <window_info anchor="bottom" id="Event Log" order="10" sideWeight="0.50052685" side_tool="true" weight="0.32897604" />
-      <window_info anchor="bottom" id="Version Control" order="9" sideWeight="0.49947312" weight="0.3264642" />
+      <window_info anchor="bottom" id="Version Control" order="9" sideWeight="0.49947312" visible="true" weight="0.32621083" />
       <window_info anchor="bottom" id="Python Console" order="8" weight="0.32763532" />
       <window_info anchor="bottom" id="Run" order="2" weight="0.23646724" />
-      <window_info active="true" id="Structure" order="1" sideWeight="0.494302" side_tool="true" visible="true" weight="0.23595506" />
+      <window_info id="Structure" order="1" sideWeight="0.4947146" side_tool="true" visible="true" weight="0.23595506" />
       <window_info anchor="bottom" id="Terminal" order="7" weight="0.32897604" />
       <window_info id="Favorites" order="2" sideWeight="0.50108933" side_tool="true" weight="0.24973656" />
       <window_info anchor="bottom" id="Debug" order="3" weight="0.4" />
@@ -353,16 +350,10 @@
     <MESSAGE value="separated potential and field calculation -DW" />
     <MESSAGE value="bugfixes in potential calculation -DW" />
     <MESSAGE value="tests with smoothing saved potential -DW" />
-    <option name="LAST_COMMIT_MESSAGE" value="tests with smoothing saved potential -DW" />
+    <MESSAGE value="add 'end plates only' option -DW" />
+    <option name="LAST_COMMIT_MESSAGE" value="add 'end plates only' option -DW" />
   </component>
   <component name="editorHistoryManager">
-    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="540">
-          <caret line="45" lean-forward="true" selection-start-line="45" selection-end-line="45" />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/read_plot_pot.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="20">
@@ -606,8 +597,15 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="574">
-          <caret line="1501" lean-forward="true" selection-start-line="1501" selection-end-line="1501" />
+        <state relative-caret-position="354">
+          <caret line="1490" lean-forward="true" selection-start-line="1490" selection-end-line="1490" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/.gitignore">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="328">
+          <caret line="111" column="2" selection-start-line="111" selection-start-column="2" selection-end-line="111" selection-end-column="2" />
         </state>
       </provider>
     </entry>
