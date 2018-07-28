@@ -12,8 +12,15 @@ from scipy.optimize import root
 # import matplotlib.pyplot as plt
 # import gc
 import datetime
-
 import time
+
+# Check if we can connect to a display, if not disable all plotting and windowed stuff (like gmsh)
+# TODO: This does not remotely cover all cases!
+import os
+if "DISPLAY" in os.environ.keys():
+    x11disp = True
+else:
+    x11disp = False
 
 try:
     import bempp.api
@@ -38,7 +45,7 @@ host = MPI.Get_processor_name()
 print("Process {} of {} on host {} started!".format(rank, size, host))
 
 np.set_printoptions(threshold=10000)
-import dans_pymodules
+
 # For now, everything involving the pymodules with be done on master proc (rank 0)
 # if rank == 0:
 #     from dans_pymodules import *
@@ -2030,7 +2037,7 @@ if __name__ == "__main__":
 
     import pickle
 
-    with open("pot_out.field", "wb") as outfile:
+    with open("ef_phi.field", "wb") as outfile:
         pickle.dump(myrfq.get_phi(), outfile)
 
     # import numpy.ma as ma

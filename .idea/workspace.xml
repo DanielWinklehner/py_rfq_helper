@@ -2,11 +2,22 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="893598d8-1f00-4f45-8d5c-6ad7651fe8a7" name="Default" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/py_rfq_helper.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/py_rfq_helper.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/LICENSE" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/old_scripts/py_rfq_designer/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/old_scripts/py_rfq_designer/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/old_scripts/py_rfq_designer/.idea/py_rfq_designer.iml" beforeDir="false" afterPath="$PROJECT_DIR$/old_scripts/py_rfq_designer/.idea/py_rfq_designer.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/old_scripts/py_rfq_designer/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/old_scripts/py_rfq_designer/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py" beforeDir="false" afterPath="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/test_xm.geo" beforeDir="false" afterPath="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/test_xm.geo" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/test_xp.geo" beforeDir="false" afterPath="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/test_xp.geo" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/test_ym.geo" beforeDir="false" afterPath="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/test_ym.geo" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/test_yp.geo" beforeDir="false" afterPath="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/test_yp.geo" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/read_plot_pot.py" beforeDir="false" afterPath="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/read_plot_pot.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/prelim_tests/README.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/py_rfq_helper/Info.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/py_rfq_helper/Vane_X.ivb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/py_rfq_helper/Vane_X.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/py_rfq_helper/Vane_Y.ivb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/py_rfq_helper/Vane_Y.txt" beforeDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="TRACKING_ENABLED" value="true" />
@@ -15,24 +26,93 @@
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
+  <component name="FUSProjectUsageTrigger">
+    <session id="-455728774">
+      <usages-collector id="statistics.lifecycle.project">
+        <counts>
+          <entry key="project.closed" value="1" />
+          <entry key="project.open.time.3" value="1" />
+          <entry key="project.opened" value="1" />
+        </counts>
+      </usages-collector>
+      <usages-collector id="statistics.file.extensions.edit">
+        <counts>
+          <entry key="py" value="495" />
+          <entry key="txt" value="37" />
+        </counts>
+      </usages-collector>
+      <usages-collector id="statistics.file.types.edit">
+        <counts>
+          <entry key="PLAIN_TEXT" value="37" />
+          <entry key="Python" value="495" />
+        </counts>
+      </usages-collector>
+      <usages-collector id="statistics.file.extensions.open">
+        <counts>
+          <entry key="py" value="2" />
+        </counts>
+      </usages-collector>
+      <usages-collector id="statistics.file.types.open">
+        <counts>
+          <entry key="Python" value="2" />
+        </counts>
+      </usages-collector>
+    </session>
+  </component>
   <component name="FavoritesManager">
     <favorites_list name="py_rfq_helper" />
   </component>
   <component name="FileEditorManager">
     <leaf SIDE_TABS_SIZE_LIMIT_KEY="300">
-      <file leaf-file-name="py_rfq_designer.py" pinned="false" current-in-tab="true">
+      <file leaf-file-name="py_rfq_designer.py" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="808">
-              <caret line="1726" lean-forward="true" selection-start-line="1726" selection-end-line="1726" />
+            <state relative-caret-position="540">
+              <caret line="45" selection-start-line="45" selection-end-line="45" />
               <folding>
-                <element signature="e#0#28#0" expanded="true" />
+                <element signature="e#0#18#0" expanded="true" />
               </folding>
             </state>
           </provider>
         </entry>
       </file>
+      <file leaf-file-name="read_plot_pot.py" pinned="false" current-in-tab="true">
+        <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/read_plot_pot.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="120">
+              <caret line="6" lean-forward="true" selection-start-line="6" selection-end-line="6" />
+              <folding>
+                <element signature="e#0#18#0" expanded="true" />
+              </folding>
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="interpolate.py" pinned="false" current-in-tab="false">
+        <entry file="file://C:/Anaconda3/Lib/site-packages/scipy/interpolate/interpolate.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="170">
+              <caret line="345" column="24" lean-forward="true" selection-start-line="345" selection-start-column="24" selection-end-line="345" selection-end-column="24" />
+            </state>
+          </provider>
+        </entry>
+      </file>
     </leaf>
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="FindInProjectRecents">
+    <findStrings>
+      <find>gradient</find>
+      <find>calculate_e</find>
+      <find>BEM++</find>
+      <find>axes</find>
+    </findStrings>
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -40,36 +120,24 @@
   <component name="IdeDocumentHistory">
     <option name="CHANGED_PATHS">
       <list>
+        <option value="$PROJECT_DIR$/temp" />
         <option value="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py" />
+        <option value="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/read_plot_pot.py" />
       </list>
     </option>
   </component>
-  <component name="ProjectFrameBounds" extendedState="7">
-    <option name="x" value="953" />
-    <option name="width" value="974" />
-    <option name="height" value="1047" />
-  </component>
-  <component name="ProjectInspectionProfilesVisibleTreeState">
-    <entry key="Project Default">
-      <profile-state>
-        <expanded-state>
-          <State>
-            <id />
-          </State>
-        </expanded-state>
-        <selected-state>
-          <State>
-            <id>Spelling</id>
-          </State>
-        </selected-state>
-      </profile-state>
-    </entry>
+  <component name="ProjectFrameBounds" extendedState="6">
+    <option name="x" value="855" />
+    <option name="y" value="35" />
+    <option name="width" value="975" />
+    <option name="height" value="1049" />
   </component>
   <component name="ProjectView">
     <navigator proportions="" version="1">
       <foldersAlwaysOnTop value="true" />
     </navigator>
     <panes>
+      <pane id="Scope" />
       <pane id="ProjectPane">
         <subPane>
           <expand>
@@ -99,12 +167,11 @@
           <select />
         </subPane>
       </pane>
-      <pane id="Scope" />
     </panes>
   </component>
   <component name="PropertiesComponent">
     <property name="last_opened_file_path" value="$PROJECT_DIR$" />
-    <property name="settings.editor.selected.configurable" value="Errors" />
+    <property name="settings.editor.selected.configurable" value="com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable" />
   </component>
   <component name="RunDashboard">
     <option name="ruleStates">
@@ -118,6 +185,54 @@
       </list>
     </option>
   </component>
+  <component name="RunManager" selected="Python.read_plot_pot">
+    <configuration name="py_rfq_designer" type="PythonConfigurationType" factoryName="Python" temporary="true">
+      <module name="py_rfq_helper" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="C:\Users\Daniel\Anaconda3\python.exe" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+    </configuration>
+    <configuration name="read_plot_pot" type="PythonConfigurationType" factoryName="Python" temporary="true">
+      <module name="py_rfq_helper" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/read_plot_pot.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+    </configuration>
+    <list>
+      <item itemvalue="Python.py_rfq_designer" />
+      <item itemvalue="Python.read_plot_pot" />
+    </list>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Python.read_plot_pot" />
+        <item itemvalue="Python.py_rfq_designer" />
+      </list>
+    </recent_temporary>
+  </component>
   <component name="SvnConfiguration">
     <configuration />
   </component>
@@ -129,51 +244,386 @@
       <option name="presentableId" value="Default" />
       <updated>1531402316512</updated>
     </task>
+    <task id="LOCAL-00001" summary="Major changes to inventor macro generation and a few other small changes like the option to ignore RMS sections. -DW">
+      <created>1532038950245</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1532038950245</updated>
+    </task>
+    <task id="LOCAL-00002" summary="test of pot plot -DW">
+      <created>1532634025381</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1532634025381</updated>
+    </task>
+    <task id="LOCAL-00003" summary="removed particle tracking -Dw">
+      <created>1532634788720</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1532634788720</updated>
+    </task>
+    <task id="LOCAL-00004" summary="started separate read and plot file in old_scripts -DW">
+      <created>1532728157422</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1532728157422</updated>
+    </task>
+    <task id="LOCAL-00005" summary="separated potential and field calculation -DW">
+      <created>1532737197916</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1532737197916</updated>
+    </task>
+    <task id="LOCAL-00006" summary="bugfixes in potential calculation -DW">
+      <created>1532744360452</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1532744360452</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
+  <component name="TodoView">
+    <todo-panel id="selected-file">
+      <is-autoscroll-to-source value="true" />
+    </todo-panel>
+    <todo-panel id="all">
+      <are-packages-shown value="true" />
+      <is-autoscroll-to-source value="true" />
+    </todo-panel>
+  </component>
   <component name="ToolWindowManager">
-    <frame x="-8" y="-8" width="1936" height="1056" extended-state="7" />
+    <frame x="-7" y="-7" width="1550" height="838" extended-state="6" />
     <editor active="true" />
     <layout>
-      <window_info content_ui="combo" id="Project" order="0" sideWeight="0.49782136" visible="true" weight="0.24973656" />
-      <window_info anchor="bottom" id="TODO" order="6" />
-      <window_info anchor="bottom" id="Event Log" order="7" side_tool="true" />
-      <window_info anchor="bottom" id="Find" order="1" weight="0.32897604" />
-      <window_info anchor="bottom" id="Version Control" order="7" />
-      <window_info anchor="bottom" id="Python Console" order="7" />
-      <window_info anchor="bottom" id="Run" order="2" />
-      <window_info active="true" id="Structure" order="1" sideWeight="0.50217867" side_tool="true" visible="true" weight="0.24973656" />
-      <window_info anchor="bottom" id="Terminal" order="7" />
-      <window_info id="Favorites" order="2" sideWeight="0.50108933" side_tool="true" weight="0.24973656" />
+      <window_info content_ui="combo" id="Project" order="0" sideWeight="0.5074627" visible="true" weight="0.23595506" />
+      <window_info anchor="bottom" id="TODO" order="6" weight="0.3286334" />
+      <window_info anchor="bottom" id="Event Log" order="10" sideWeight="0.50052685" side_tool="true" weight="0.32897604" />
+      <window_info active="true" anchor="bottom" id="Run" order="2" visible="true" weight="0.23646724" />
+      <window_info anchor="bottom" id="Version Control" order="9" sideWeight="0.49947312" weight="0.3264642" />
+      <window_info anchor="bottom" id="Python Console" order="8" weight="0.32763532" />
+      <window_info id="Structure" order="1" sideWeight="0.49253732" side_tool="true" visible="true" weight="0.23595506" />
+      <window_info anchor="bottom" id="Terminal" order="7" weight="0.32897604" />
       <window_info anchor="bottom" id="Debug" order="3" weight="0.4" />
+      <window_info id="Favorites" order="2" sideWeight="0.50108933" side_tool="true" weight="0.24973656" />
       <window_info anchor="right" content_ui="combo" id="Hierarchy" order="2" weight="0.25" />
+      <window_info anchor="bottom" id="Inspection" order="5" weight="0.4" />
       <window_info anchor="right" id="Commander" order="0" weight="0.4" />
       <window_info anchor="right" id="Ant Build" order="1" weight="0.25" />
       <window_info anchor="bottom" id="Message" order="0" />
-      <window_info anchor="bottom" id="Inspection" order="5" weight="0.4" />
       <window_info anchor="bottom" id="Cvs" order="4" weight="0.25" />
+      <window_info anchor="bottom" id="Find" order="1" weight="0.32897604" />
+      <window_info anchor="bottom" id="Messages" order="11" />
     </layout>
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State>
+              <option name="RECENTLY_FILTERED_USER_GROUPS">
+                <collection />
+              </option>
+              <option name="RECENTLY_FILTERED_BRANCH_GROUPS">
+                <collection />
+              </option>
+              <option name="COLUMN_ORDER">
+                <list>
+                  <option value="0" />
+                  <option value="1" />
+                  <option value="2" />
+                  <option value="3" />
+                </list>
+              </option>
+            </State>
+          </value>
+        </entry>
+      </map>
+    </option>
   </component>
   <component name="VcsContentAnnotationSettings">
     <option name="myLimit" value="2678400000" />
   </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="Major changes to inventor macro generation and a few other small changes like the option to ignore RMS sections. -DW" />
+    <MESSAGE value="test of pot plot -DW" />
+    <MESSAGE value="removed particle tracking -Dw" />
+    <MESSAGE value="started separate read and plot file in old_scripts -DW" />
+    <MESSAGE value="separated potential and field calculation -DW" />
+    <MESSAGE value="bugfixes in potential calculation -DW" />
+    <option name="LAST_COMMIT_MESSAGE" value="bugfixes in potential calculation -DW" />
+  </component>
   <component name="editorHistoryManager">
     <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="28373">
-          <caret line="1669" column="16" lean-forward="true" selection-start-line="1669" selection-start-column="16" selection-end-line="1669" selection-end-column="16" />
+        <state relative-caret-position="540">
+          <caret line="45" lean-forward="true" selection-start-line="45" selection-end-line="45" />
           <folding>
-            <element signature="e#0#28#0" expanded="true" />
+            <element signature="e#0#18#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/read_plot_pot.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="20">
+          <caret line="5" lean-forward="true" selection-start-line="5" selection-end-line="5" />
+          <folding>
+            <element signature="e#0#18#0" expanded="true" />
           </folding>
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="808">
-          <caret line="1726" lean-forward="true" selection-start-line="1726" selection-end-line="1726" />
+        <state relative-caret-position="40480">
+          <caret line="2024" column="49" lean-forward="true" selection-start-line="2024" selection-start-column="49" selection-end-line="2024" selection-end-column="49" />
           <folding>
-            <element signature="e#0#28#0" expanded="true" />
+            <element signature="e#0#18#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/read_plot_pot.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="220">
+          <caret line="15" column="31" lean-forward="true" selection-start-line="15" selection-start-column="31" selection-end-line="15" selection-end-column="31" />
+          <folding>
+            <element signature="e#0#18#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="21675">
+          <caret line="1275" lean-forward="true" selection-start-line="1275" selection-end-line="1275" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://E:/Anaconda3/Lib/site-packages/numpy/lib/function_base.py" />
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="21624">
+          <caret line="1272" lean-forward="true" selection-start-line="1272" selection-end-line="1272" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://E:/Anaconda3/Lib/site-packages/numpy/lib/function_base.py" />
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="20910">
+          <caret line="1230" column="70" selection-start-line="1230" selection-start-column="70" selection-end-line="1230" selection-end-column="70" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="20910">
+          <caret line="1230" column="70" selection-start-line="1230" selection-start-column="70" selection-end-line="1230" selection-end-column="70" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://E:/Anaconda3/Lib/site-packages/dans_pymodules/field.py" />
+    <entry file="file://E:/Anaconda3/Lib/site-packages/scipy/interpolate/interpolate.py" />
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="20859">
+          <caret line="1227" lean-forward="true" selection-start-line="1227" selection-end-line="1227" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="32249">
+          <caret line="1897" lean-forward="true" selection-start-line="1897" selection-end-line="1897" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="32368">
+          <caret line="1904" column="5" lean-forward="true" selection-start-line="1904" selection-start-column="5" selection-end-line="1904" selection-end-column="5" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="31807">
+          <caret line="1871" column="38" lean-forward="true" selection-start-line="1871" selection-start-column="38" selection-end-line="1871" selection-end-column="38" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="31858">
+          <caret line="1874" column="43" lean-forward="true" selection-start-line="1874" selection-start-column="43" selection-end-line="1874" selection-end-column="43" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="28815">
+          <caret line="1695" lean-forward="true" selection-start-line="1695" selection-end-line="1695" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="17">
+          <caret line="12" lean-forward="true" selection-start-line="12" selection-end-line="12" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="26299">
+          <caret line="1547" column="32" lean-forward="true" selection-start-line="1547" selection-start-column="32" selection-end-line="1547" selection-end-column="32" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="28271">
+          <caret line="1674" lean-forward="true" selection-start-line="1674" selection-end-line="1674" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="26809">
+          <caret line="1588" column="44" selection-start-line="1588" selection-start-column="44" selection-end-line="1588" selection-end-column="44" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="26792">
+          <caret line="1576" lean-forward="true" selection-start-line="1576" selection-end-line="1576" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="28373">
+          <caret line="1669" column="16" lean-forward="true" selection-start-line="1669" selection-start-column="16" selection-end-line="1669" selection-end-column="16" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/../py_particle_processor/py_particle_processor_qt/py_particle_processor_qt.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="119">
+          <caret line="7" lean-forward="true" selection-start-line="7" selection-end-line="7" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/../py_particle_processor/py_particle_processor_qt/__init__.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="17">
+          <caret line="1" lean-forward="true" selection-start-line="1" selection-end-line="1" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/py_rfq_helper/field.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="-289">
+          <caret line="34" lean-forward="true" selection-start-line="34" selection-end-line="34" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/py_rfq_helper/py_rfq_helper.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="153">
+          <caret line="24" lean-forward="true" selection-start-line="24" selection-end-line="24" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://E:/Anaconda3/Lib/site-packages/scipy/interpolate/interpolate.py" />
+    <entry file="file://E:/Anaconda3/Lib/site-packages/dans_pymodules/field.py" />
+    <entry file="file://$PROJECT_DIR$/temp" />
+    <entry file="file://E:/Anaconda3/Lib/site-packages/numpy/core/numeric.py" />
+    <entry file="file://$USER_HOME$/.PyCharmCE2018.1/system/python_stubs/-791851423/builtins.py" />
+    <entry file="file://E:/Anaconda3/Lib/site-packages/numpy/lib/function_base.py" />
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="300">
+          <caret line="47" lean-forward="true" selection-start-line="47" selection-end-line="47" />
+          <folding>
+            <element signature="e#0#18#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/read_plot_pot.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="275">
+          <caret line="16" lean-forward="true" selection-start-line="16" selection-end-line="16" />
+          <folding>
+            <element signature="e#0#18#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/../py_particle_processor/py_particle_processor_qt/py_particle_processor_qt.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="119">
+          <caret line="7" lean-forward="true" selection-start-line="7" selection-end-line="7" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/../py_particle_processor/py_particle_processor_qt/__init__.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="17">
+          <caret line="1" lean-forward="true" selection-start-line="1" selection-end-line="1" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/py_rfq_helper/field.py" />
+    <entry file="file://$PROJECT_DIR$/py_rfq_helper/py_rfq_helper.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="153">
+          <caret line="24" lean-forward="true" selection-start-line="24" selection-end-line="24" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://E:/Anaconda3/Lib/site-packages/scipy/interpolate/interpolate.py" />
+    <entry file="file://E:/Anaconda3/Lib/site-packages/dans_pymodules/field.py" />
+    <entry file="file://$PROJECT_DIR$/temp" />
+    <entry file="file://E:/Anaconda3/Lib/site-packages/numpy/core/numeric.py" />
+    <entry file="file://$USER_HOME$/.PyCharmCE2018.1/system/python_stubs/-791851423/builtins.py" />
+    <entry file="file://E:/Anaconda3/Lib/site-packages/numpy/lib/function_base.py" />
+    <entry file="file://$USER_HOME$/Anaconda3/Lib/site-packages/dans_pymodules/field.py" />
+    <entry file="file://$USER_HOME$/Anaconda3/Lib/site-packages/dans_pymodules/__init__.py" />
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/py_rfq_designer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="540">
+          <caret line="45" selection-start-line="45" selection-end-line="45" />
+          <folding>
+            <element signature="e#0#18#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://C:/Anaconda3/Lib/site-packages/scipy/interpolate/interpolate.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="170">
+          <caret line="345" column="24" lean-forward="true" selection-start-line="345" selection-start-column="24" selection-end-line="345" selection-end-column="24" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/old_scripts/py_rfq_designer/py_rfq_designer/read_plot_pot.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="120">
+          <caret line="6" lean-forward="true" selection-start-line="6" selection-end-line="6" />
+          <folding>
+            <element signature="e#0#18#0" expanded="true" />
           </folding>
         </state>
       </provider>
