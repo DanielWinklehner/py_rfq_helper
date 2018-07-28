@@ -2092,6 +2092,7 @@ if __name__ == "__main__":
     myrfq.set_bempp_parameter("add_endplates", True)
     myrfq.set_bempp_parameter("cyl_id", 0.1)
     myrfq.set_bempp_parameter("grid_res", 0.005)
+    myrfq.set_bempp_parameter("pot_shift", 3.0 * 22000.0)
 
     print(myrfq)
 
