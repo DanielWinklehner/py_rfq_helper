@@ -61,7 +61,8 @@ def smooth(x, window_len=11, window='hanning'):
 
 
 # fn = None
-fn = "C:/Users/Daniel Winklehner/Documents/ef_phi2.field"
+# fn = "C:/Users/Daniel Winklehner/Documents/ef_phi2.field"
+fn = "ef_phi.field"
 
 if fn is None:
     fd = FileDialog()
