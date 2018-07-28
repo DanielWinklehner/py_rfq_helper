@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.constants as const
 from multiprocessing import Pool
-from scipy.interpolate import interp1d, UnivariateSpline
+from scipy.interpolate import interp1d
 # from scipy import meshgrid
 from scipy.special import iv as bessel1
 from scipy.optimize import root
@@ -10,7 +10,7 @@ from scipy.optimize import root
 # import numpy as np
 # import platform
 # import matplotlib.pyplot as plt
-import gc
+# import gc
 import datetime
 
 import time
@@ -19,7 +19,7 @@ try:
     import bempp.api
     from bempp.api.shapes.shapes import __generate_grid_from_geo_string as generate_from_string
 except ImportError:
-    print("Couldn't import BEM++, no meshing or BEM field calculation will be possible.")
+    print("Couldn't import BEMPP, no meshing or BEM field calculation will be possible.")
     bempp = None
     generate_from_string = None
 
@@ -27,6 +27,7 @@ try:
     from mpi4py import MPI
 except ImportError:
     print("Could not import mpi4py!")
+    MPI = None
     exit()
 
 comm = MPI.COMM_WORLD
@@ -37,7 +38,7 @@ host = MPI.Get_processor_name()
 print("Process {} of {} on host {} started!".format(rank, size, host))
 
 np.set_printoptions(threshold=10000)
-
+import dans_pymodules
 # For now, everything involving the pymodules with be done on master proc (rank 0)
 # if rank == 0:
 #     from dans_pymodules import *
@@ -61,7 +62,7 @@ X = 0
 Y = 1
 Z = 2
 XYZ = range(3)
-axes = {"X": 0, "Y": 1, "Z": 2}
+AXES = {"X": 0, "Y": 1, "Z": 2}
 
 # --- This is a nice implementation of a simple timer I found online -DW --- #
 _tm = 0
@@ -744,8 +745,8 @@ EndFor
 
             # TODO: still need to mirror this on x=y plane for second vane!
 
-        with open("test_{}.geo".format(self._type), "w") as outfile:
-            outfile.write(gmsh_str)
+        with open("test_{}.geo".format(self._type), "w") as _of:
+            _of.write(gmsh_str)
 
         self._mesh_params["gmsh_str"] = gmsh_str
 
@@ -885,7 +886,7 @@ EndFor
             vertices = np.array([points["x"], points["y"], points["z"]])
             elements = np.array(elements).T
 
-            # Test bem++ calculation for single vane
+            # Test bempp calculation for single vane
             if bempp is not None:
                 # noinspection PyUnresolvedReferences
                 self._mesh = bempp.api.grid.grid_from_element_data(vertices, elements)
@@ -935,7 +936,7 @@ EndFor
     def plot_mesh(self):
 
         if bempp is None or self._mesh is None:
-            print("Either BEM++ couldn't be loaded or there is not yet a mesh generated!")
+            print("Either BEMPP couldn't be loaded or there is not yet a mesh generated!")
             return 1
 
         self._mesh.plot()
@@ -960,7 +961,7 @@ class PyRFQ(object):
                                  "operator": None,
                                  "grid_fun": None,
                                  "ef_itp": None,  # type: Field
-                                 "ef_phi": None,  # type: ndarray
+                                 "ef_phi": None,  # type: np.ndarray
                                  # TODO: Should put pot in it's own class that also holds dx, nx, etc.
                                  "add_cyl": False,  # Do we want to add a grounded cylinder to the BEMPP problem
                                  "cyl_id": 0.2,  # Inner diameter of surrounding cylinder
@@ -1199,7 +1200,7 @@ class PyRFQ(object):
                             domain_decomp=(4, 4, 4),
                             overlap=0):
         """
-        Calculates the E-Field from the BEM++ solution using the user defined cube or
+        Calculates the E-Field from the BEMPP solution using the user defined cube or
         the cube corresponding to the cyclindrical outer boundary.
 
         TODO: This function is not very MPI aware and could be optimized!
@@ -1229,7 +1230,7 @@ class PyRFQ(object):
         fsp = self._variables_bempp["f_space"]
 
         if sol is None:
-            print("Please solve with BEM++ before calculating the E-Field")
+            print("Please solve with BEMPP before calculating the E-Field")
             return 1
 
         _ts = time.time()
@@ -1268,7 +1269,7 @@ class PyRFQ(object):
 
         # Print out domain information
         if self._debug:
-            print("E-Field Calculation. "
+            print("Potential Calculation. "
                   "Grid spacings: ({:.4f}, {:.4f}, {:.4f}), number of meshes: {}".format(_d[0], _d[1], _d[2], _n))
             print("Number of Subdomains: {}, "
                   "Domain decomposition {}:".format(np.product(domain_decomp), domain_decomp))
@@ -1282,14 +1283,13 @@ class PyRFQ(object):
             for y1, y2 in zip(start_idxs[Y], end_idxs[Y]):
                 for z1, z2 in zip(start_idxs[Z], end_idxs[Z]):
 
-                    if self._debug:
-                        print("[{}] Domain {}/{}, "
-                              "Index Limits: x = ({}, {}), "
-                              "y = ({}, {}), "
-                              "z = ({}, {})".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - _ts))),
-                                                    domain_idx,
-                                                    np.product(domain_decomp),
-                                                    x1, x2 - 1, y1, y2 - 1, z1, z2 - 1))
+                    print("[{}] Domain {}/{}, "
+                          "Index Limits: x = ({}, {}), "
+                          "y = ({}, {}), "
+                          "z = ({}, {})".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - _ts))),
+                                                domain_idx,
+                                                np.product(domain_decomp),
+                                                x1, x2 - 1, y1, y2 - 1, z1, z2 - 1))
 
                     grid_pts = np.vstack([_mesh[x1:x2, y1:y2, z1:z2].ravel() for _mesh in mesh])
 
@@ -1314,7 +1314,7 @@ class PyRFQ(object):
         numpts = 5000
 
         if zlim is None:
-            zmin = np.min(self._variables_bempp["rf_itp"]._field["z"].grid[2])
+            zmin = np.min(self._variables_bempp["rf_itp"]._field["z"].grid[2])  # TODO: Field() should have limits
             zmax = np.min(self._variables_bempp["rf_itp"]._field["z"].grid[2])
         else:
             zmin, zmax = zlim
@@ -1359,6 +1359,10 @@ class PyRFQ(object):
         plt.legend(loc=2)
 
         plt.show()
+
+    def get_phi(self):
+
+        return self._variables_bempp["if_phi"]
 
     def generate_full_mesh(self):
 
@@ -1458,7 +1462,7 @@ Physical Surface(0) = {6, out[]};
     def solve_bempp(self):
 
         if self._full_mesh is None:
-            print("Please generate a mesh before solving with BEM++!")
+            print("Please generate a mesh before solving with BEMPP!")
             return 1
 
         dp0_space = bempp.api.function_space(self._full_mesh, "DP", 0)
@@ -1696,7 +1700,7 @@ Physical Surface(0) = {6, out[]};
 
     Set oSpline = oSketch3D.SketchSplines3D.Add(vertexCollection1)
 
-""".format(os.path.join(save_folder, "Vane_{}.txt".format(direction)), axes[direction], axes[direction])
+""".format(os.path.join(save_folder, "Vane_{}.txt".format(direction)), AXES[direction], AXES[direction])
 
             sweep_text = """
     ' Now make a sketch to be swept
@@ -1772,13 +1776,13 @@ Physical Surface(0) = {6, out[]};
     ' Create another work plane above the vane
     Dim oWP2 As WorkPlane
     Set oWP2 = oCompDef.WorkPlanes.AddByPlaneAndOffset(oCompDef.WorkPlanes.Item({}), minHeight + height)
-""".format(axes[direction] + 1)  # X is 0 and Y is 1, but the correct plane indices are 1 and 2
+""".format(AXES[direction] + 1)  # X is 0 and Y is 1, but the correct plane indices are 1 and 2
             else:
                 sweep_text += """
     ' Create another work plane above the vane
     Dim oWP2 As WorkPlane
     Set oWP2 = oCompDef.WorkPlanes.AddByPlaneAndOffset(oCompDef.WorkPlanes.Item({}), height)
-""".format(axes[direction] + 1)  # X is 0 and Y is 1, but the correct plane indices are 1 and 2
+""".format(AXES[direction] + 1)  # X is 0 and Y is 1, but the correct plane indices are 1 and 2
 
             sweep_text += """
     ' Start a sketch
@@ -1999,7 +2003,7 @@ if __name__ == "__main__":
     #                                nz=600)
     # exit()
 
-    print("Generating full mesh for BEM++")
+    print("Generating full mesh for BEMPP")
     ts = time.time()
     # myrfq._variables_bempp["add_cyl"] = True  # TODO: Write functions to get and set variables (bempp and other)
     myrfq.generate_full_mesh()
@@ -2007,28 +2011,27 @@ if __name__ == "__main__":
 
     # input("Hit enter to continue...")
 
-    print("Solving BEM++ problem")
+    print("Solving BEMPP problem")
     ts = time.time()
     myrfq.solve_bempp()
-    print("Solving BEM++ took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
+    print("Solving BEMPP took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
     # input("Hit enter to continue...")
 
-    print("Calculating E-Field")
+    print("Calculating Potential")
     ts = time.time()
     myres = [0.001, 0.001, 0.001]
     limit = 0.02
-    mypot = myrfq.calculate_potential(limits=((-limit, limit), (-limit, limit), (-0.1, 1.35)),
-                                      res=myres,
-                                      domain_decomp=(2, 2, 50),
-                                      overlap=0,
-                                      )
+    myrfq.calculate_potential(limits=((-limit, limit), (-limit, limit), (-0.1, 1.35)),
+                              res=myres,
+                              domain_decomp=(2, 2, 50),
+                              overlap=0)
     print("Potential took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
     import pickle
 
     with open("pot_out.field", "wb") as outfile:
-        pickle.dump(mypot, outfile)
+        pickle.dump(myrfq.get_phi(), outfile)
 
     # import numpy.ma as ma
     #
