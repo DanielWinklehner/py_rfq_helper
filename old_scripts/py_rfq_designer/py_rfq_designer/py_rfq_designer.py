@@ -1434,8 +1434,70 @@ Physical Surface(0) = {6, out[]};
 
 """
                 # noinspection PyCallingNonCallable
-                with open("cyl_str.geo", "w") as of:
-                    of.write(cyl_gmsh_str)
+                if self._debug:
+                    with open("cyl_str.geo", "w") as _of:
+                        _of.write(cyl_gmsh_str)
+
+                mesh = generate_from_string(cyl_gmsh_str)
+
+                _vertices = mesh.leaf_view.vertices
+                _elements = mesh.leaf_view.elements
+                _domain_ids = mesh.leaf_view.domain_indices
+
+                vertices = np.concatenate((vertices, _vertices), axis=1)
+                elements = np.concatenate((elements, _elements + vertex_counter), axis=1)
+                domains = np.concatenate((domains, _domain_ids), axis=0)
+
+            elif self._variables_bempp["add_endplates"]:
+
+                zmin = 0.0 - self._variables_bempp["cyl_gap"]
+                zmax = self._length + self._variables_bempp["cyl_gap"]
+                rmax = self._variables_bempp["cyl_id"] / 2.0
+
+                cyl_gmsh_str = """Geometry.NumSubEdges = 100; // nicer display of curve
+Mesh.CharacteristicLengthMax = {};
+h = {};
+rmax = {};
+zmin = {};
+zmax = {};
+len = zmax - zmin;
+            """.format(0.025, 0.025, rmax, zmin, zmax)  # TODO: Make this a variable (mesh size)
+                cyl_gmsh_str += """
+Point(1) = { 0, 0, zmin, h };
+Point(2) = {rmax,0,zmin,h};
+Point(3) = {0,rmax,zmin,h};
+Point(4) = {-rmax,0,zmin,h};
+Point(5) = {0,-rmax,zmin,h};
+
+Circle(1) = {2,1,3};
+Circle(2) = {3,1,4};
+Circle(3) = {4,1,5};
+Circle(4) = {5,1,2};
+
+Line Loop(5) = {1,2,3,4};
+Plane Surface(6) = {5};
+
+Point(6) = { 0, 0, zmax, h };
+Point(7) = {rmax,0,zmax,h};
+Point(8) = {0,rmax,zmax,h};
+Point(9) = {-rmax,0,zmax,h};
+Point(10) = {0,-rmax,zmax,h};
+
+Circle(7) = {7,6,8};
+Circle(8) = {8,6,9};
+Circle(9) = {9,6,10};
+Circle(10) = {10,6,7};
+
+Line Loop(11) = {7,8,9,10};
+Plane Surface(12) = {11};
+
+Physical Surface(0) = {6, -12};
+"""
+                # noinspection PyCallingNonCallable
+                if self._debug:
+                    with open("cyl_str.geo", "w") as _of:
+                        _of.write(cyl_gmsh_str)
+
                 mesh = generate_from_string(cyl_gmsh_str)
 
                 _vertices = mesh.leaf_view.vertices

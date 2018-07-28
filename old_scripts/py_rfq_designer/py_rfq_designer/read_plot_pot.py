@@ -59,8 +59,9 @@ def smooth(x, window_len=11, window='hanning'):
     y = np.convolve(w / w.sum(), s, mode='valid')
     return y
 
+
 # fn = None
-fn = "C:/Users/Daniel Winklehner/Documents/ef_phi.field"
+fn = "C:/Users/Daniel Winklehner/Documents/ef_phi2.field"
 
 if fn is None:
     fd = FileDialog()
@@ -72,26 +73,26 @@ with open(fn, "rb") as infile:
 
 print(mypot.shape)
 
-# plt.imshow(mypot[:, :, 350].T, extent=(-0.015, 0.015, -0.015, 0.015))
-# plt.xlabel("x (m)")
-# plt.ylabel("y (m)")
-# plt.title("Potential (V)")
-# plt.colorbar()
-# plt.show()
+plt.imshow(mypot[:, :, 350].T, extent=(-0.02, 0.02, -0.015, 0.015))
+plt.xlabel("x (m)")
+plt.ylabel("y (m)")
+plt.title("Potential (V)")
+plt.colorbar()
+plt.show()
 
-# plt.imshow(mypot[20, :, :], extent=(-0.1, 1.35, -0.02, 0.02))
-# plt.xlabel("z (m)")
-# plt.ylabel("y (m)")
-# plt.title("Potential (V)")
-# plt.colorbar()
-# plt.show()
+plt.imshow(mypot[10, :, :], extent=(-0.1, 1.35, -0.02, 0.02))
+plt.xlabel("z (m)")
+plt.ylabel("y (m)")
+plt.title("Potential (V)")
+plt.colorbar()
+plt.show()
 
-pot_xy0 = mypot[20, 20, :]
+pot_xy0 = mypot[10, 10, :]
 pot_xy0 = smooth(pot_xy0)[5:-5]
 
 print(pot_xy0.shape)
 
-z_orig = np.linspace(-0.1, 1.35, 1451, endpoint=True)
+z_orig = np.linspace(-0.1, 1.35, 726, endpoint=True)
 print(z_orig)
 pot_itp = interp1d(z_orig,
                    pot_xy0, kind='cubic')
