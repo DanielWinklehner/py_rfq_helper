@@ -971,6 +971,7 @@ class PyRFQ(object):
                                  "ef_phi": None,  # type: np.ndarray
                                  # TODO: Should put pot in it's own class that also holds dx, nx, etc.
                                  "add_cyl": False,  # Do we want to add a grounded cylinder to the BEMPP problem
+                                 "add_endplates": False,
                                  "cyl_id": 0.2,  # Inner diameter of surrounding cylinder
                                  "cyl_gap": 0.01  # gap between vanes and cylinder TODO: Maybe make this asymmetric?
                                  }
@@ -1310,7 +1311,7 @@ class PyRFQ(object):
                     del sl_pot
                     del _pot
 
-        self._variables_bempp["ef_phi"] = pot
+        self._variables_bempp["ef_phi"] = pot -  3.0 * self._voltage
 
         return 0
 
@@ -1369,7 +1370,7 @@ class PyRFQ(object):
 
     def get_phi(self):
 
-        return self._variables_bempp["if_phi"]
+        return self._variables_bempp["ef_phi"]
 
     def generate_full_mesh(self):
 
@@ -1461,7 +1462,7 @@ rmax = {};
 zmin = {};
 zmax = {};
 len = zmax - zmin;
-            """.format(0.025, 0.025, rmax, zmin, zmax)  # TODO: Make this a variable (mesh size)
+            """.format(0.005, 0.005, rmax, zmin, zmax)  # TODO: Make this a variable (mesh size)
                 cyl_gmsh_str += """
 Point(1) = { 0, 0, zmin, h };
 Point(2) = {rmax,0,zmin,h};
@@ -1488,10 +1489,10 @@ Circle(8) = {8,6,9};
 Circle(9) = {9,6,10};
 Circle(10) = {10,6,7};
 
-Line Loop(11) = {7,8,9,10};
+Line Loop(11) = {-7,-8,-9,-10};
 Plane Surface(12) = {11};
 
-Physical Surface(0) = {6, -12};
+Physical Surface(0) = {6, 12};
 """
                 # noinspection PyCallingNonCallable
                 if self._debug:
@@ -1537,7 +1538,7 @@ Physical Surface(0) = {6, -12};
         dp0_space = bempp.api.function_space(self._full_mesh, "DP", 0)
         slp = bempp.api.operators.boundary.laplace.single_layer(dp0_space, dp0_space, dp0_space)
 
-        domain_mapping = {0: 0}  # 0 is grounded by default
+        domain_mapping = {0: 0.0 + 3.0 * self._voltage}  # 0 is grounded by default
         for vane in self._vanes:
             domain_mapping[vane.domain_idx] = vane.voltage
 
@@ -1619,14 +1620,14 @@ Physical Surface(0) = {6, -12};
         for vane_type in ["yp"]:
             self._vanes.append(PyRFQVane(vane_type=vane_type,
                                          cells=self._cells,
-                                         voltage=self._voltage,
+                                         voltage=self._voltage + 3.0 * self._voltage,
                                          debug=self._debug))
 
         # for vane_type in ["xp", "xm"]:
         for vane_type in ["xp"]:
             self._vanes.append(PyRFQVane(vane_type=vane_type,
                                          cells=self._cells,
-                                         voltage=-self._voltage,
+                                         voltage=-self._voltage + 3.0 * self._voltage,
                                          debug=self._debug))
 
         # Generate the two vanes in parallel:
@@ -1954,7 +1955,7 @@ End Sub
 
 if __name__ == "__main__":
 
-    myrfq = PyRFQ(voltage=22000.0, debug=False)
+    myrfq = PyRFQ(voltage=22000.0, debug=True)
 
     # myrfq.append_cell(cell_type="STA",
     #                   aperture=0.15,
@@ -2074,7 +2075,8 @@ if __name__ == "__main__":
 
     print("Generating full mesh for BEMPP")
     ts = time.time()
-    # myrfq._variables_bempp["add_cyl"] = True  # TODO: Write functions to get and set variables (bempp and other)
+    myrfq._variables_bempp["add_endplates"] = True  # TODO: Write functions to get and set variables (bempp and other)
+    myrfq._variables_bempp["cyl_id"] = 0.1
     myrfq.generate_full_mesh()
     print("Meshing took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
