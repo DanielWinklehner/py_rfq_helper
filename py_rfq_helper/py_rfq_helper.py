@@ -1,3 +1,18 @@
+# RFQ class. Contains parameters and guidelines to create an RFQ in an already
+# existent warp simulation. Contains an instance of a FieldLoader class from field.py.
+# 
+# Usage: create an instance of an RFQ with the filename of either cell parameters 
+#        or field data, and a boolean to indicate if the file contains the former
+#        or the latter. 
+#        User must also instantiate the values "vane_distance" (vane distance 
+#        from axis), and rf_freq (frequency field modulation in Hz). If the bool
+#        simple_rods is set, the user must instantiate the value "vane_radius" to
+#        be the radius of the rod vanes. 
+#        The values "zstart" (start of the rfq), "sim_start" (start of the
+#        simulation, and "sim_end_buffer" (extra room beyond the rfq) can be set
+#        if necessary, and are otherwise instantiated at 0.0.
+#       
+
 from warp import *
 from field import *
 
@@ -57,11 +72,15 @@ class RFQ(object):
             self._field.load_field_from_cells(self._filename)
         else:
             self._field.load_field_from_file(self._filename)
-        
+
 
         self._sim_end = self._field._zmax + self.sim_end_buffer
 
         self.import_field()
+        
+        
+        self.plot_efield()
+
         self.create_vanes()
 
     def import_field(self):
@@ -124,18 +143,18 @@ class RFQ(object):
         # Parameters: None
         # Returns: None
 
-        #plotegrd(component="z", iy=self._field._ny, ix=self._field._nx)
-        #fma()
+        plotegrd(component="z", iy=self._field._ny, ix=self._field._nx)
+        fma()
 
-        # plotegrd(component="x", ix=self._field._nx, iy=self._field._ny)
-        # fma()
+        plotegrd(component="x", ix=self._field._nx, iy=self._field._ny)
+        fma()
 
-        #plotegrd(component="y", iy=self._field._ny, ix=self._field._nx)
-        #fma()
+        plotegrd(component="y", iy=self._field._ny, ix=self._field._nx)
+        fma()
 
         
-        plotegrd(component="x", iz=50)
-        fma()
+        # plotegrd(component="x", iz=50)
+        # fma()
         #plotegrd(component="y", iz=50)
         #fma()
     

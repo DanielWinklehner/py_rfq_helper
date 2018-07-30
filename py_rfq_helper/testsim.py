@@ -5,8 +5,8 @@ import time
 #FILENAME  = "vecc_rfq_004_py.dat"
 #FILENAME  = "PARMTEQOUT.TXT"
 #FILENAME  = "Parm_50_63cells.dat"
-#FILENAME  = "fieldoutput.txt"
-FILENAME  = "fieldw015width.dat"
+FILENAME  = "fieldoutput.txt"
+#FILENAME  = "fieldw015width.dat"
 
 VANE_RAD  = 2 * cm
 VANE_DIST = 11 * cm
@@ -15,7 +15,7 @@ NX     = 16
 NY     = 16
 NZ     = 512
 PRWALL = 0.2
-D_T    = 1e-10
+D_T    = 1e-8
 RF_FREQ = 3.28e7
 Z_START = 0.0 #the start of the rfq
 SIM_START = -0.15
@@ -31,7 +31,7 @@ w3d.ymmax =  PRWALL
 w3d.ymmin = -PRWALL
 w3d.ny    =  NY
 
-w3d.zmmax =  1.456 + 0.2
+w3d.zmmax =  1.456 + 0.2 + 0.2
 w3d.zmmin =  SIM_START
 w3d.nz    =  NZ
 
@@ -160,9 +160,9 @@ def beamplots():
     plotYphase()
     refresh()
 
-@callfromafterstep
+#@callfromafterstep
 def makeplots():
-    if top.it%50 == 0:
+    if top.it%1 == 0:
         beamplots()
         #window(0)
         #rfq.plot_efield()
@@ -184,7 +184,7 @@ part_z = beam.getz()
 
 print(len(part_x))
 
-with open("particleoutput.dat", 'w') as outfile:
+with open("particleoutput.dump", 'w') as outfile:
     outfile.write("x, y, z\n")
     for x, y, z in zip(part_x, part_y, part_z):
         outfile.write("{:.4e}   {:.4e}   {:.4e}\n".format(x, y, z))

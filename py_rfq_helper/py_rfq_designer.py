@@ -1880,7 +1880,6 @@ if __name__ == "__main__":
     #                   modulation=0.038802 / 0.02919376887767351,
     #                   length=0.01828769716079613)
 
-    print(myrfq)
 
     print("Generating vanes")
     ts = time.time()

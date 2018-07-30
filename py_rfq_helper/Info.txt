@@ -1,10 +1,10 @@
-Inventor Macros and Profile generated on 2018-07-23 16:05:41
+Inventor Macros and Profile generated on 2018-07-27 11:29:34
 
 Parameters:
-vane_height_type: absolute
 vane_type: vane
-vane_radius: 0.005
 nz: 600
+vane_height_type: absolute
+vane_radius: 0.005
 vane_height: 0.15
 
 Other useful values:
