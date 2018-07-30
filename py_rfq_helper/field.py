@@ -52,7 +52,7 @@ class FieldLoader(object):
         self.parse_field(x, y, z, e_x, e_y, e_z)
         
 
-    def load_field_from_cells(self, filename=None):
+    def load_field_from_cells_tt(self, voltage, frequency, a_init, xy_limits, filename=None, resolution=0.002):
         # Loads and calculates field from PARMTEQ file using Two Term potential method
 
         if filename is None:
@@ -63,8 +63,13 @@ class FieldLoader(object):
 
         loadpath = filename
 
-        fg = FieldGenerator(resolution=0.002)
-        fg.set_bempp_mesh_size(0.002)
+        fg = FieldGenerator(resolution=resolution, xy_limits=xy_limits)
+
+        fg._voltage   = voltage
+        fg._frequency = frequency
+        fg._a_init    = a_init
+
+        fg.set_bempp_mesh_size(resolution)
 
         fg.load_parameters_from_file(filename=loadpath)
 

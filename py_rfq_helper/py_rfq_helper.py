@@ -20,6 +20,8 @@ class RFQ(object):
     def __init__(self,
                  filename=None,
                  from_cells=False,
+                 twoterm=True,
+                 boundarymethod=False
                  ):
         # Takes in a filename with Cell parameters or field
         # Vane radius set to some value if using simple rod approximation
@@ -28,18 +30,27 @@ class RFQ(object):
 
         # User Parameters
         #     Passed in via constructor
-        self._from_cells    = from_cells
-        self._filename      = filename
+        self._from_cells     = from_cells
+        self._filename       = filename
+        self._twoterm        = twoterm
+        self._boundarymethod = boundarymethod
+
 
         #     Must be set outside of object creation
-        self.simple_rods   = True
-        self.vane_radius   = None
-        self.vane_distance = None
-        self.rf_freq       = None
-        self.zstart        = 0.0
-        self.sim_start     = 0.0
+        self.simple_rods    = True
+        self.vane_radius    = None
+        self.vane_distance  = None
+        self.rf_freq        = None
+        self.zstart         = 0.0
+        self.sim_start      = 0.0
         self.sim_end_buffer = 0.0
+        self.resolution     = 0.002
 
+        # Two term variables
+        self.tt_voltage    = None
+        self.tt_frequency  = None
+        self.tt_a_init     = None
+        self.xy_limits     = None
 
         # "Private" variables
         self._conductors    = None
@@ -67,17 +78,38 @@ class RFQ(object):
         if (not self.rf_freq):
             print("The RF frequency (rf_freq) must be specified. Exiting")
             exit(1)
+        if (self._from_cells and self._twoterm):
+            print("Resolution is {}".format(self.resolution))
+            if (not self.xy_limits) or (np.shape(self.xy_limits) != (4,)):
+                print("Please set XY limits (xy_limits) in the form of a list [xmin, xmax, ymin, ymax]")
+                exit(1)
+            if (not self.tt_voltage):
+                print("Please set vane voltage (tt_voltage) for two term potential calculation")
+                exit(1)
+            elif (not self.tt_a_init):
+                print("Please set [asdfasd] (tt_a_init) for two term potential calculation")
+                exit(1)
+
+        self.tt_frequency = self.rf_freq
 
         if self._from_cells:
-            self._field.load_field_from_cells(self._filename)
+            if (self._twoterm):
+                self._field.load_field_from_cells_tt(self.tt_voltage, 
+                                                  self.tt_frequency,
+                                                  self.tt_a_init,
+                                                  self.xy_limits,
+                                                  self._filename, resolution=self.resolution)
+            elif (self._boundarymethod):
+                print("placeholder!")
+                #placeholder for bempp method
         else:
+            print("hello!")
             self._field.load_field_from_file(self._filename)
 
 
         self._sim_end = self._field._zmax + self.sim_end_buffer
 
         self.import_field()
-        
         
         self.plot_efield()
 

@@ -309,7 +309,7 @@ class Vane(object):
 
 
 class FieldGenerator(object):
-    def __init__(self, resolution=0.001):
+    def __init__(self, resolution=0.001, xy_limits=None):
         self._colors = MyColors()
 
         self._filename = None
@@ -323,7 +323,7 @@ class FieldGenerator(object):
         self._a_init = 0.038802  # (m)
         self._resolution = resolution
         self._bempp_mesh_size = resolution
-        self._xy_limits = [-0.015, 0.015, -0.015, 0.015]
+        self._xy_limits = xy_limits
         self._total_length = 0.0  # (m)
 
         self._nx = int((self._xy_limits[1] - self._xy_limits[0]) / self._resolution) + 1
@@ -1191,6 +1191,7 @@ class FieldGenerator(object):
         plt.show()
 
     def set_bempp_mesh_size(self, mesh_size):
+        print("voltage {}".format(self._voltage))
         self._bempp_mesh_size = mesh_size
 
     def set_calculate_vane_profile(self, calculate_vane_profile=True):
@@ -1516,7 +1517,7 @@ if __name__ == "__main__":
 
     operapath = os.path.join(folder, "Transition_cell_pot_field.table")
     #loadpath = r"Parm_50_last3.dat"
-    loadpath = r"Parm_50_63cells.dat"
+    loadpath = r"input/Parm_50_63cells.dat"
     fg = FieldGenerator(resolution=0.002)
     fg.set_bempp_mesh_size(0.002)
 

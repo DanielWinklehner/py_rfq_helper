@@ -2,11 +2,11 @@ from warp import *
 from py_rfq_helper import *
 import time
 
-#FILENAME  = "vecc_rfq_004_py.dat"
-#FILENAME  = "PARMTEQOUT.TXT"
-#FILENAME  = "Parm_50_63cells.dat"
-FILENAME  = "fieldoutput.txt"
-#FILENAME  = "fieldw015width.dat"
+#FILENAME  = "input/vecc_rfq_004_py.dat"
+#FILENAME  = "input/PARMTEQOUT.TXT"
+#FILENAME  = "input/Parm_50_63cells.dat"
+#FILENAME  = "input/fieldoutput.txt"
+FILENAME   = "input/fieldw015width.dat"
 
 VANE_RAD  = 2 * cm
 VANE_DIST = 11 * cm
@@ -15,8 +15,8 @@ NX     = 16
 NY     = 16
 NZ     = 512
 PRWALL = 0.2
-D_T    = 1e-8
-RF_FREQ = 3.28e7
+D_T    = 1e-9
+RF_FREQ = 32.8e6
 Z_START = 0.0 #the start of the rfq
 SIM_START = -0.15
 setup()
@@ -59,16 +59,28 @@ top.injctspc = 1000000
 
 
 
-# RFQ creation and initiliaztion of parameters
 
-rfq = RFQ(filename=FILENAME, from_cells=False)
-rfq.vane_radius   = VANE_RAD
-rfq.vane_distance = VANE_DIST
+
+# RFQ creation and initialization of parameters
+
+rfq = RFQ(filename=FILENAME, from_cells=False, twoterm=True)
+rfq.vane_radius       = VANE_RAD
+rfq.vane_distance     = VANE_DIST
 rfq.zstart            = Z_START
 rfq.rf_freq           = RF_FREQ
 rfq.sim_start         = SIM_START
 rfq.sim_end_buffer    = 0.2
+rfq.resolution        = 0.002
+
+rfq.xy_limits         = [-0.015, 0.015, -0.015, 0.015]
+rfq.tt_voltage        = 50.0e3
+rfq.tt_a_init         = 0.038802
+
 rfq.install()
+
+
+
+
 
 childmesh = refinedsolver.addchild(mins=[rfq._field._xmin, rfq._field._ymin, SIM_START], 
                              maxs=[rfq._field._xmax, rfq._field._ymax, w3d.zmmax],
@@ -160,7 +172,7 @@ def beamplots():
     plotYphase()
     refresh()
 
-#@callfromafterstep
+@callfromafterstep
 def makeplots():
     if top.it%1 == 0:
         beamplots()
