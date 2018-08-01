@@ -35,6 +35,16 @@ class FieldLoader(object):
 
         self._vane_profile = np.array([])
 
+    def add_cell(self,
+                 cell_type,
+                 aperture,
+                 modulation,
+                 length,
+                 flip_z=False,
+                 shift_cell_no=False):
+
+        self._fg.add_cell(cell_type, aperture, modulation, length, flip_z, shift_cell_no)
+
     def load_field_from_file(self, filename=None):
         # Loads the field from a dat file.
         # Param: filename
@@ -76,18 +86,7 @@ class FieldLoader(object):
         self._fg.load_parameters_from_file(filename=loadpath)
 
 
-        self._fg.add_cell(cell_type="TCS",
-
-                    aperture=0.011255045027294745,
-                    modulation=1.6686390559337798,
-                    length=0.0427)
-        # 0.10972618296477678
-
-        self._fg.add_cell(cell_type="DCS",
-                    aperture=0.015017826368066015,
-                    modulation=1.0,
-                    length=0.13)
-
+    def generate_field_from_cells_tt(self):
         self._fg.set_calculate_vane_profile(True)
         self._fg.generate()
 
@@ -101,9 +100,6 @@ class FieldLoader(object):
         self._vane_profile = self._fg._vane_profile_x
 
         self.parse_field(x, y, z, ex, ey, ez)
-
-    def generate_field_from_cells_tt(self):
-        print("Hi")
 
     def load_field_from_cells_bempp(self, voltage, cyl_id, grid_res, pot_shift, add_endplates=True,filename=None):
         myrfq = PyRFQ(voltage=voltage, debug=True)
@@ -199,3 +195,9 @@ class FieldLoader(object):
         self._ymax = y.max()
         self._zmin = z.min()
         self._zmax = z.max()
+
+        print("===============================================")
+        print(self._zmax)
+        print(z)
+        print("===============================================")
+

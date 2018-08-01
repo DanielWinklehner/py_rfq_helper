@@ -68,7 +68,10 @@ class RFQ(object):
             if self._twoterm:
                 self._field.generate_field_from_cells_tt()
 
-                
+        
+
+        self._sim_end = self._field._zmax + self.sim_end_buffer
+
         self.import_field()
         
         self.create_vanes()
@@ -115,10 +118,6 @@ class RFQ(object):
             self._field.load_field_from_file(self._filename)
 
 
-        self._sim_end = self._field._zmax + self.sim_end_buffer
-
-
-
     def import_field(self):
         # import_field
         # Parameters: none
@@ -158,6 +157,9 @@ class RFQ(object):
         length = self._field._z_length
         zcent  = (self._field._z_length / 2.0) + abs(self.zstart)
 
+        print("length of shell: {}".format(self._sim_end - self.sim_start))
+        print("simstart {}    simend {}".format(self.sim_start, self._sim_end))
+
         print("zmin {}  zmax {}".format(self._field._zmax, self._field._zmin))
         print("simend {} simstart {}".format(self._sim_end, self.sim_start))
 
@@ -194,3 +196,12 @@ class RFQ(object):
         #plotegrd(component="y", iz=50)
         #fma()
     
+    def add_cell(self,
+                 cell_type,
+                 aperture,
+                 modulation,
+                 length,
+                 flip_z=False,
+                 shift_cell_no=False):
+    
+        self._field.add_cell(cell_type, aperture, modulation, length, flip_z, shift_cell_no)

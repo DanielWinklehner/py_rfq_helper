@@ -496,6 +496,8 @@ class FieldGenerator(object):
         m = cell_parameters["modulation"]
         a = cell_parameters["aperture"]
 
+        print("parameters len: {}".format(len(self._parameters)))
+
         if 0 < cell_number:
             ma_fudge_begin = 0.5 * (1.0 + self._parameters["aperture"][cell_number - 1] *
                                     self._parameters["modulation"][cell_number - 1] / m / a)
@@ -503,7 +505,9 @@ class FieldGenerator(object):
         else:
             a_fudge_begin = ma_fudge_begin = 1.0
 
-        if cell_number < len(self._parameters):
+        if (cell_number + 1) == len(self._parameters):
+            a_fudge_end = ma_fudge_end = 1.0
+        elif cell_number < len(self._parameters):
             ma_fudge_end = 0.5 * (
                 1.0 + self._parameters["aperture"][cell_number + 1] * self._parameters["modulation"][
                     cell_number + 1] / m / a)
@@ -511,8 +515,6 @@ class FieldGenerator(object):
         else:
             a_fudge_end = ma_fudge_end = 1.0
 
-
-        print(cell_parameters["cell length"])
         a_fudge = interp1d([0.0, cell_parameters["cell length"]], [a_fudge_begin, a_fudge_end])
         ma_fudge = interp1d([0.0, cell_parameters["cell length"]], [ma_fudge_begin, ma_fudge_end])
 
@@ -925,7 +927,7 @@ class FieldGenerator(object):
         return 0
 
     def calculate_ncs(self, cell_parameters, cell_number=None):
-
+        print("Calcncs cell num: {}   passed:  {}".format(cell_parameters["cell no"], cell_number))
         # Find all z values that are within the cell
         cell_idx = np.where((self._mesh_z <= cell_parameters["cumulative length"]) &
                             (self._mesh_z >= (cell_parameters["cumulative length"] -
@@ -1028,9 +1030,9 @@ class FieldGenerator(object):
         # Omit RMS if there are no cells with modulation 1
         if self._nrms > 0:
             self.calculate_rms_in()
-
         # Loop over all remaining cells starting after RMS
         for cn, cell_parameters in enumerate(self._parameters[self._nrms:]):
+
             cn += self._nrms
             # Calculate the potential and field according to cell type
             if cell_parameters["cell type"] == "NCS":

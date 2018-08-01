@@ -31,7 +31,7 @@ w3d.ymmax =  PRWALL
 w3d.ymmin = -PRWALL
 w3d.ny    =  NY
 
-w3d.zmmax =  1.456 + 0.2 + 0.2
+w3d.zmmax =  1.456 + 0.2
 w3d.zmmin =  SIM_START
 w3d.nz    =  NZ
 
@@ -75,8 +75,22 @@ rfq.resolution        = 0.002
 rfq.xy_limits         = [-0.015, 0.015, -0.015, 0.015]
 rfq.tt_voltage        = 50.0e3
 rfq.tt_a_init         = 0.038802
-
 rfq.setup()
+
+rfq.add_cell(cell_type="TCS",
+
+            aperture=0.011255045027294745,
+            modulation=1.6686390559337798,
+            length=0.0427)
+# 0.10972618296477678
+
+rfq.add_cell(cell_type="DCS",
+            aperture=0.015017826368066015,
+            modulation=1.0,
+            length=0.13)
+
+
+
 rfq.install()
 
 
@@ -177,9 +191,9 @@ def beamplots():
 def makeplots():
     if top.it%1 == 0:
         beamplots()
-        #window(0)
-        #rfq.plot_efield()
-        #refresh()
+        # window(0)
+        # rfq.plot_efield()
+        # refresh()
         
 
 starttime = time.time()
