@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.constants as const
 from field_from_two_term_potential import *
+from py_rfq_designer import *
 
 # FILENAME = "vecc_rfq_003_py.dat"
 # FILENAME = "vecc_rfq_004_py.dat"
@@ -30,8 +31,9 @@ class FieldLoader(object):
         self._zmin = 0.0
         self._zmax = 0.0
 
-        self._vane_profile = np.array([])
+        self._fg = None
 
+        self._vane_profile = np.array([])
 
     def load_field_from_file(self, filename=None):
         # Loads the field from a dat file.
@@ -63,68 +65,89 @@ class FieldLoader(object):
 
         loadpath = filename
 
-        fg = FieldGenerator(resolution=resolution, xy_limits=xy_limits)
+        self._fg = FieldGenerator(resolution=resolution, xy_limits=xy_limits)
 
-        fg._voltage   = voltage
-        fg._frequency = frequency
-        fg._a_init    = a_init
+        self._fg._voltage   = voltage
+        self._fg._frequency = frequency
+        self._fg._a_init    = a_init
 
-        fg.set_bempp_mesh_size(resolution)
+        self._fg.set_bempp_mesh_size(resolution)
 
-        fg.load_parameters_from_file(filename=loadpath)
+        self._fg.load_parameters_from_file(filename=loadpath)
 
-        fg.add_cell(cell_type="TCS",
+
+        self._fg.add_cell(cell_type="TCS",
+
                     aperture=0.011255045027294745,
                     modulation=1.6686390559337798,
-                  length=0.0427)
+                    length=0.0427)
         # 0.10972618296477678
 
-        fg.add_cell(cell_type="DCS",
+        self._fg.add_cell(cell_type="DCS",
                     aperture=0.015017826368066015,
                     modulation=1.0,
                     length=0.13)
 
-        # Second Drift is necessary to keep cell count correct
-        # fg.add_cell(cell_type="DCS",
-        #             aperture=0.015,
-        #             modulation=1.0,
-        #             length=0.02)
+        self._fg.set_calculate_vane_profile(True)
+        self._fg.generate()
 
-        # fg.add_cell(cell_type="TCS",
-        #             aperture=0.01,
-        #             modulation=2.0,
-        #             length=0.041,
-        #             flip_z=True)
+        x = self._fg._mesh_x.flatten()
+        y = self._fg._mesh_y.flatten()
+        z = self._fg._mesh_z.flatten()
+        ex = self._fg._ex.flatten()
+        ey = self._fg._ey.flatten()
+        ez = self._fg._ez.flatten()
 
-        # fg.add_cell(cell_type="TCS",
-        #             aperture=0.01,
-        #             modulation=2.0,
-        #             length=0.041,
-        #             shift_cell_no=True)
-
-        # fg.set_plot_tcs_vanes(True)
-        fg.set_calculate_vane_profile(True)
-        fg.generate()
-
-        # fg.plot_pot_of_z()
-        # fg.plot_combo()
-        # fg.plot_e_xy(z=1.33)
-        # fg.plot_ex_of_z(x=0.05)
-        # fg.plot_pot_xy(z=1.33)
-        # fg.plot_ez_of_z()
-
-        # fg.write_inventor_macro(save_folder=folder)
-
-        x = fg._mesh_x.flatten()
-        y = fg._mesh_y.flatten()
-        z = fg._mesh_z.flatten()
-        ex = fg._ex.flatten()
-        ey = fg._ey.flatten()
-        ez = fg._ez.flatten()
-
-        self._vane_profile = fg._vane_profile_x
+        self._vane_profile = self._fg._vane_profile_x
 
         self.parse_field(x, y, z, ex, ey, ez)
+
+    def generate_field_from_cells_tt(self):
+        print("Hi")
+
+    def load_field_from_cells_bempp(self, voltage, cyl_id, grid_res, pot_shift, add_endplates=True,filename=None):
+        myrfq = PyRFQ(voltage=voltage, debug=True)
+
+        # Load the base RFQ design from the parmteq file
+        if myrfq.add_cells_from_file(filename=filename, ignore_rms=True) == 1:
+            print("Something went wrong. Please check that your file.")
+            exit(1)
+
+        # myrfq.set_bempp_parameter("add_endplates", True)
+        # myrfq.set_bempp_parameter("cyl_id", 0.1)
+        # myrfq.set_bempp_parameter("grid_res", 0.005)
+        # myrfq.set_bempp_parameter("pot_shift", 3.0 * 22000.0)
+
+        myrfq.set_bempp_parameter("add_endplates", add_endplates)
+        myrfq.set_bempp_parameter("cyl_id", cyl_id)
+        myrfq.set_bempp_parameter("grid_res", grid_res)
+        myrfq.set_bempp_parameter("pot_shift", pot_shift)
+
+        print("Generating vanes")
+        ts = time.time()
+        myrfq.generate_vanes()
+        print("Generating vanes took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
+
+        print("Generating full mesh for BEMPP")
+        ts = time.time()
+        myrfq.generate_full_mesh()
+        print("Meshing took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
+
+        print("Solving BEMPP problem")
+        ts = time.time()
+        myrfq.solve_bempp()
+        print("Solving BEMPP took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
+
+        print("Calculating Potential")
+        ts = time.time()
+        myres = [0.002, 0.002, 0.002]
+        limit = 0.02
+        myrfq.calculate_potential(limits=((-limit, limit), (-limit, limit), (-0.1, 1.35)),
+                                  res=myres,
+                                  domain_decomp=(1, 1, 50),
+                                  overlap=0)
+        print("Potential took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
+
 
 
 

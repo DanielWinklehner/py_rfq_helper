@@ -4,9 +4,9 @@ import time
 
 #FILENAME  = "input/vecc_rfq_004_py.dat"
 #FILENAME  = "input/PARMTEQOUT.TXT"
-#FILENAME  = "input/Parm_50_63cells.dat"
+FILENAME  = "input/Parm_50_63cells.dat"
 #FILENAME  = "input/fieldoutput.txt"
-FILENAME   = "input/fieldw015width.dat"
+#FILENAME   = "input/fieldw015width.dat"
 
 VANE_RAD  = 2 * cm
 VANE_DIST = 11 * cm
@@ -63,7 +63,7 @@ top.injctspc = 1000000
 
 # RFQ creation and initialization of parameters
 
-rfq = RFQ(filename=FILENAME, from_cells=False, twoterm=True)
+rfq = RFQ(filename=FILENAME, from_cells=True, twoterm=True)
 rfq.vane_radius       = VANE_RAD
 rfq.vane_distance     = VANE_DIST
 rfq.zstart            = Z_START
@@ -76,6 +76,7 @@ rfq.xy_limits         = [-0.015, 0.015, -0.015, 0.015]
 rfq.tt_voltage        = 50.0e3
 rfq.tt_a_init         = 0.038802
 
+rfq.setup()
 rfq.install()
 
 
@@ -183,7 +184,7 @@ def makeplots():
 
 starttime = time.time()
 
-step(25000)
+step(1000)
 hcp()
 
 endtime = time.time()

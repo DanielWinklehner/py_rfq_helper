@@ -64,7 +64,14 @@ class RFQ(object):
         # Parameters: None
         # Returns: None
         # Installs the field and conductors into Warp
-        self.setup()
+        if self._from_cells:
+            if self._twoterm:
+                self._field.generate_field_from_cells_tt()
+
+                
+        self.import_field()
+        
+        self.create_vanes()
 
     def setup(self):
         # Parameters: None
@@ -87,10 +94,11 @@ class RFQ(object):
                 print("Please set vane voltage (tt_voltage) for two term potential calculation")
                 exit(1)
             elif (not self.tt_a_init):
-                print("Please set [asdfasd] (tt_a_init) for two term potential calculation")
+                print("Please set initial aperture (tt_a_init) for two term potential calculation")
                 exit(1)
 
         self.tt_frequency = self.rf_freq
+
 
         if self._from_cells:
             if (self._twoterm):
@@ -109,11 +117,7 @@ class RFQ(object):
 
         self._sim_end = self._field._zmax + self.sim_end_buffer
 
-        self.import_field()
-        
-        self.plot_efield()
 
-        self.create_vanes()
 
     def import_field(self):
         # import_field
