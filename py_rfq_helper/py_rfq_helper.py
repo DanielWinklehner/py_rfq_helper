@@ -52,6 +52,13 @@ class RFQ(object):
         self.tt_a_init     = None
         self.xy_limits     = None
 
+
+        # Bempp variables
+        self.add_endplates = True
+        self.cyl_id        = None
+        self.grid_res_bempp = None
+        self.pot_shift      = None
+
         # "Private" variables
         self._conductors    = None
         self._field         = FieldLoader()
@@ -67,6 +74,8 @@ class RFQ(object):
         if self._from_cells:
             if self._twoterm:
                 self._field.generate_field_from_cells_tt()
+            elif (self._boundarymethod):
+                print("placeholder!")
 
         
 
@@ -89,16 +98,27 @@ class RFQ(object):
             print("The RF frequency (rf_freq) must be specified. Exiting")
             exit(1)
         if (self._from_cells and self._twoterm):
-            print("Resolution is {}".format(self.resolution))
-            if (not self.xy_limits) or (np.shape(self.xy_limits) != (4,)):
-                print("Please set XY limits (xy_limits) in the form of a list [xmin, xmax, ymin, ymax]")
-                exit(1)
-            if (not self.tt_voltage):
-                print("Please set vane voltage (tt_voltage) for two term potential calculation")
-                exit(1)
-            elif (not self.tt_a_init):
-                print("Please set initial aperture (tt_a_init) for two term potential calculation")
-                exit(1)
+            if self._twoterm:
+                print("Resolution is {}".format(self.resolution))
+                if (not self.xy_limits) or (np.shape(self.xy_limits) != (4,)):
+                    print("Please set XY limits (xy_limits) in the form of a list [xmin, xmax, ymin, ymax]")
+                    exit(1)
+                if (not self.tt_voltage):
+                    print("Please set vane voltage (tt_voltage) for two term potential calculation")
+                    exit(1)
+                elif (not self.tt_a_init):
+                    print("Please set initial aperture (tt_a_init) for two term potential calculation")
+                    exit(1)
+            if self._boundarymethod:
+                if (not self.cyl_id):
+                    print("Please set [asdfasdfasdf] (cyl_id) for boundary method calculation")
+                    exit(1)
+                if (not self.grid_res_bempp):
+                    print("Please set boundary method grid resolution (grid_res_bempp)")
+                    exit(1)
+                if (not self.pot_shift):
+                    print("Please set potential shift (pot_shift) for boundary method.")
+                    exit(1)
 
         self.tt_frequency = self.rf_freq
 
@@ -203,5 +223,5 @@ class RFQ(object):
                  length,
                  flip_z=False,
                  shift_cell_no=False):
-    
+
         self._field.add_cell(cell_type, aperture, modulation, length, flip_z, shift_cell_no)

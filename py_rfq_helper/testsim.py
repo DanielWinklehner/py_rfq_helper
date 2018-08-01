@@ -60,7 +60,7 @@ top.injctspc = 1000000
 
 
 
-
+##########################################
 # RFQ creation and initialization of parameters
 
 rfq = RFQ(filename=FILENAME, from_cells=True, twoterm=True)
@@ -93,7 +93,7 @@ rfq.add_cell(cell_type="DCS",
 
 rfq.install()
 
-
+############################################
 
 
 

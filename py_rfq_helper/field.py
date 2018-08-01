@@ -32,6 +32,7 @@ class FieldLoader(object):
         self._zmax = 0.0
 
         self._fg = None
+        self._myrfq = None
 
         self._vane_profile = np.array([])
 
@@ -102,49 +103,49 @@ class FieldLoader(object):
         self.parse_field(x, y, z, ex, ey, ez)
 
     def load_field_from_cells_bempp(self, voltage, cyl_id, grid_res, pot_shift, add_endplates=True,filename=None):
-        myrfq = PyRFQ(voltage=voltage, debug=True)
+        self._myrfq = PyRFQ(voltage=voltage, debug=True)
 
         # Load the base RFQ design from the parmteq file
         if myrfq.add_cells_from_file(filename=filename, ignore_rms=True) == 1:
-            print("Something went wrong. Please check that your file.")
+            print("Something went wrong. Please check your file.")
             exit(1)
 
+
+    def generate_field_from_cells_bempp(self, cyl_id, grid_res, pot_shift, add_endplates=True):
         # myrfq.set_bempp_parameter("add_endplates", True)
         # myrfq.set_bempp_parameter("cyl_id", 0.1)
         # myrfq.set_bempp_parameter("grid_res", 0.005)
         # myrfq.set_bempp_parameter("pot_shift", 3.0 * 22000.0)
 
-        myrfq.set_bempp_parameter("add_endplates", add_endplates)
-        myrfq.set_bempp_parameter("cyl_id", cyl_id)
-        myrfq.set_bempp_parameter("grid_res", grid_res)
-        myrfq.set_bempp_parameter("pot_shift", pot_shift)
+        self._myrfq.set_bempp_parameter("add_endplates", add_endplates)
+        self._myrfq.set_bempp_parameter("cyl_id", cyl_id)
+        self._myrfq.set_bempp_parameter("grid_res", grid_res)
+        self._myrfq.set_bempp_parameter("pot_shift", pot_shift)
 
         print("Generating vanes")
         ts = time.time()
-        myrfq.generate_vanes()
+        self._myrfq.generate_vanes()
         print("Generating vanes took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
         print("Generating full mesh for BEMPP")
         ts = time.time()
-        myrfq.generate_full_mesh()
+        self._myrfq.generate_full_mesh()
         print("Meshing took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
         print("Solving BEMPP problem")
         ts = time.time()
-        myrfq.solve_bempp()
+        self._myrfq.solve_bempp()
         print("Solving BEMPP took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
         print("Calculating Potential")
         ts = time.time()
         myres = [0.002, 0.002, 0.002]
         limit = 0.02
-        myrfq.calculate_potential(limits=((-limit, limit), (-limit, limit), (-0.1, 1.35)),
+        self._myrfq.calculate_potential(limits=((-limit, limit), (-limit, limit), (-0.1, 1.35)),
                                   res=myres,
                                   domain_decomp=(1, 1, 50),
                                   overlap=0)
         print("Potential took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
-
-
 
 
     def parse_field(self, x, y, z, e_x, e_y, e_z):
