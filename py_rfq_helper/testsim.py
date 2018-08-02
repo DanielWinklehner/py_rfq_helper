@@ -1,10 +1,11 @@
 from warp import *
 from py_rfq_helper import *
+from py_rfq_designer import *
 import time
 
 #FILENAME  = "input/vecc_rfq_004_py.dat"
-#FILENAME  = "input/PARMTEQOUT.TXT"
-FILENAME  = "input/Parm_50_63cells.dat"
+FILENAME  = "input/PARMTEQOUT.TXT"
+#FILENAME  = "input/Parm_50_63cells.dat"
 #FILENAME  = "input/fieldoutput.txt"
 #FILENAME   = "input/fieldw015width.dat"
 
@@ -63,7 +64,7 @@ top.injctspc = 1000000
 ##########################################
 # RFQ creation and initialization of parameters
 
-rfq = RFQ(filename=FILENAME, from_cells=True, twoterm=True)
+rfq = PyRFQ(filename=FILENAME, from_cells=True, twoterm=False, boundarymethod=True)
 rfq.vane_radius       = VANE_RAD
 rfq.vane_distance     = VANE_DIST
 rfq.zstart            = Z_START
@@ -73,8 +74,16 @@ rfq.sim_end_buffer    = 0.2
 rfq.resolution        = 0.002
 
 rfq.xy_limits         = [-0.015, 0.015, -0.015, 0.015]
+rfq.z_limits           = [0, 1.4]
 rfq.tt_voltage        = 50.0e3
+rfq._voltage = 50.0e3
 rfq.tt_a_init         = 0.038802
+
+rfq.add_endplates = True
+rfq.cyl_id        = 0.1
+rfq.grid_res_bempp = 0.005 
+rfq.pot_shift      = 3.0 * 22000.0
+
 rfq.setup()
 
 rfq.add_cell(cell_type="TCS",
@@ -84,10 +93,10 @@ rfq.add_cell(cell_type="TCS",
             length=0.0427)
 # 0.10972618296477678
 
-rfq.add_cell(cell_type="DCS",
-            aperture=0.015017826368066015,
-            modulation=1.0,
-            length=0.13)
+# rfq.add_cell(cell_type="DCS",
+#             aperture=0.015017826368066015,
+#             modulation=1.0,
+#             length=0.13)
 
 
 

@@ -13,6 +13,8 @@ from scipy.optimize import root
 # import gc
 import datetime
 import time
+from warp import * 
+
 
 # Check if we can connect to a display, if not disable all plotting and windowed stuff (like gmsh)
 # TODO: This does not remotely cover all cases!
@@ -21,6 +23,7 @@ if "DISPLAY" in os.environ.keys():
     x11disp = True
 else:
     x11disp = False
+
 
 try:
     import bempp.api
@@ -505,10 +508,10 @@ class PyRFQVane(object):
 
         # gmsh_str = "SetFactory('OpenCASCADE');\n"
         gmsh_str = """Geometry.NumSubEdges = 100; // nicer display of curve
-Mesh.CharacteristicLengthMax = {};
-h = {};
+                    Mesh.CharacteristicLengthMax = {};
+                    h = {};
 
-""".format(h, h)
+                    """.format(h, h)
 
         if symmetry:
             assert self._type not in ["ym", "xm"], "Sorry, mesh generation with symmetry only works for vanes " \
@@ -542,11 +545,11 @@ h = {};
         new_ln = spline1_lns[-1] + 1
 
         gmsh_str += """
-For i In {{{}:{}}}
-    Line(i{:+d}) = {{i-1, i}};
-EndFor
+                    For i In {{{}:{}}}
+                        Line(i{:+d}) = {{i-1, i}};
+                    EndFor
 
-""".format(spline1_pts[0] + 1, spline1_pts[-1], -(new_pt - new_ln))
+                    """.format(spline1_pts[0] + 1, spline1_pts[-1], -(new_pt - new_ln))
 
         # Center outer spline (not actually a spline atm)
         spline2_pts = [new_pt]
@@ -563,11 +566,11 @@ EndFor
         new_ln = spline2_lns[-1] + 1
 
         gmsh_str += """
-For i In {{{}:{}}}
-    Line(i{:+d}) = {{i-1, i}};
-EndFor
+                    For i In {{{}:{}}}
+                        Line(i{:+d}) = {{i-1, i}};
+                    EndFor
 
-""".format(spline2_pts[0] + 1, spline2_pts[-1], -(new_pt - new_ln))
+                    """.format(spline2_pts[0] + 1, spline2_pts[-1], -(new_pt - new_ln))
 
         # Four points on top
         top_pts = list(range(new_pt, new_pt + 4))
@@ -638,23 +641,23 @@ EndFor
         new_ln = arc_lns[-1] + 1
 
         gmsh_str += """
-For i In {{{}:{}}}
-    Circle(i{:+d}) = {{i - {}, i, i - {}}};
-EndFor
-""".format(arc_pts[0], arc_pts[-1], -(new_pt - new_ln), arc_pts[0] - spline1_pts[0], arc_pts[0] - spline2_pts[0])
+                    For i In {{{}:{}}}
+                        Circle(i{:+d}) = {{i - {}, i, i - {}}};
+                    EndFor
+                    """.format(arc_pts[0], arc_pts[-1], -(new_pt - new_ln), arc_pts[0] - spline1_pts[0], arc_pts[0] - spline2_pts[0])
 
-        # Line Loops and Surfaces for the Modulations
+                            # Line Loops and Surfaces for the Modulations
         gmsh_str += """
-For i In {{{}:{}}}
-    ll = newll; Line Loop (ll) = {{{} * i, {} * (i {:+d}), {} * -(i + 1), {} * -(i {:+d})}}; Surface(i + {}) = {{ll}};
-EndFor
+                    For i In {{{}:{}}}
+                        ll = newll; Line Loop (ll) = {{{} * i, {} * (i {:+d}), {} * -(i + 1), {} * -(i {:+d})}}; Surface(i + {}) = {{ll}};
+                    EndFor
 
-""".format(arc_lns[0], arc_lns[-2],
-           sign, sign,
-           -(arc_lns[0] - spline2_lns[0]),
-           sign, sign,
-           -(arc_lns[0] - spline1_lns[0]),
-           surf_count - arc_lns[0])
+                    """.format(arc_lns[0], arc_lns[-2],
+                               sign, sign,
+                               -(arc_lns[0] - spline2_lns[0]),
+                               sign, sign,
+                               -(arc_lns[0] - spline1_lns[0]),
+                               surf_count - arc_lns[0])
 
         surf_count += len(arc_lns) - 1
 
@@ -950,10 +953,12 @@ EndFor
 
         return 0
 
+import field
 
 # noinspection PyUnresolvedReferences
 class PyRFQ(object):
-    def __init__(self, voltage, debug=False):
+    def __init__(self, voltage=None, filename=None, from_cells=False,
+                 twoterm=True, boundarymethod=False, debug=False):
 
         self._debug = debug
         self._voltage = voltage
@@ -985,6 +990,49 @@ class PyRFQ(object):
                                     "vane_height_type": 'absolute',
                                     "nz": 500
                                     }
+
+
+        ###### From rfq helper class ######
+
+        # User Parameters
+        #     Passed in via constructor
+        self._from_cells     = from_cells
+        self._filename       = filename
+        self._twoterm        = twoterm
+        self._boundarymethod = boundarymethod
+
+
+        #     Must be set outside of object creation
+        self.simple_rods    = True
+        self.vane_radius    = None
+        self.vane_distance  = None
+        self.rf_freq        = None
+        self.zstart         = 0.0
+        self.sim_start      = 0.0
+        self.sim_end_buffer = 0.0
+        self.resolution     = 0.002
+
+        # Two term variables
+        self.tt_frequency  = None
+        self.tt_a_init     = None
+
+
+        self.xy_limits     = None
+        self.z_limits      = None
+
+        # Bempp variables
+        self.add_endplates = True
+        self.cyl_id        = None
+        self.grid_res_bempp = None
+        self.pot_shift      = None
+
+        # "Private" variables
+        self._conductors    = None
+        self._field         = field.FieldLoader()
+        self._sim_end       = 0.0
+
+        # Debugging
+        self._ray           = [] #debugging
 
     def __str__(self):
         text = "\nPyRFQ object with {} cells and length {:.4f} m. Vane voltage = {} V\n".format(self._cell_nos[-1],
@@ -1436,34 +1484,34 @@ class PyRFQ(object):
                 rmax = self._variables_bempp["cyl_id"] / 2.0
 
                 cyl_gmsh_str = """Geometry.NumSubEdges = 100; // nicer display of curve
-Mesh.CharacteristicLengthMax = {};
-h = {};
-rmax = {};
-zmin = {};
-zmax = {};
-len = zmax - zmin;
+                                Mesh.CharacteristicLengthMax = {};
+                                h = {};
+                                rmax = {};
+                                zmin = {};
+                                zmax = {};
+                                len = zmax - zmin;
 
-""".format(0.025, 0.025, rmax, zmin, zmax)  # TODO: Make this a variable (mesh size)
+                                """.format(0.025, 0.025, rmax, zmin, zmax)  # TODO: Make this a variable (mesh size)
                 cyl_gmsh_str += """Point(1) = { 0, 0, zmin, h };
 
-Point(2) = {rmax,0,zmin,h};
-Point(3) = {0,rmax,zmin,h};
-Point(4) = {-rmax,0,zmin,h};
-Point(5) = {0,-rmax,zmin,h};
+                                Point(2) = {rmax,0,zmin,h};
+                                Point(3) = {0,rmax,zmin,h};
+                                Point(4) = {-rmax,0,zmin,h};
+                                Point(5) = {0,-rmax,zmin,h};
 
-Circle(1) = {2,1,3};
-Circle(2) = {3,1,4};
-Circle(3) = {4,1,5};
-Circle(4) = {5,1,2};
+                                Circle(1) = {2,1,3};
+                                Circle(2) = {3,1,4};
+                                Circle(3) = {4,1,5};
+                                Circle(4) = {5,1,2};
 
-Line Loop(5) = {1,2,3,4};
-Plane Surface(6) = {5};
+                                Line Loop(5) = {1,2,3,4};
+                                Plane Surface(6) = {5};
 
-out[] = Extrude{0, 0, len} { Surface {6}; };
+                                out[] = Extrude{0, 0, len} { Surface {6}; };
 
-Physical Surface(100) = {6, out[]};
+                                Physical Surface(100) = {6, out[]};
 
-"""
+                                """
                 # noinspection PyCallingNonCallable
                 if self._debug:
                     with open("cyl_str.geo", "w") as _of:
@@ -1486,48 +1534,48 @@ Physical Surface(100) = {6, out[]};
                 rmax = self._variables_bempp["cyl_id"] / 2.0
 
                 cyl_gmsh_str = """Geometry.NumSubEdges = 100; // nicer display of curve
-Mesh.CharacteristicLengthMax = {};
-h = {};
-rmax = {};
-zmin = {};
-zmax = {};
-len = zmax - zmin;
-            """.format(0.005, 0.005, rmax, zmin, zmax)  # TODO: Make this a variable (mesh size)
+                                Mesh.CharacteristicLengthMax = {};
+                                h = {};
+                                rmax = {};
+                                zmin = {};
+                                zmax = {};
+                                len = zmax - zmin;
+                                            """.format(0.005, 0.005, rmax, zmin, zmax)  # TODO: Make this a variable (mesh size)
                 cyl_gmsh_str += """
-Point(1) = { 0, 0, zmin, h };
-Point(2) = {rmax,0,zmin,h};
-Point(3) = {0,rmax,zmin,h};
-Point(4) = {-rmax,0,zmin,h};
-Point(5) = {0,-rmax,zmin,h};
+                                Point(1) = { 0, 0, zmin, h };
+                                Point(2) = {rmax,0,zmin,h};
+                                Point(3) = {0,rmax,zmin,h};
+                                Point(4) = {-rmax,0,zmin,h};
+                                Point(5) = {0,-rmax,zmin,h};
 
-Circle(1) = {2,1,3};
-Circle(2) = {3,1,4};
-Circle(3) = {4,1,5};
-Circle(4) = {5,1,2};
+                                Circle(1) = {2,1,3};
+                                Circle(2) = {3,1,4};
+                                Circle(3) = {4,1,5};
+                                Circle(4) = {5,1,2};
 
-Line Loop(5) = {1,2,3,4};
-Plane Surface(6) = {5};
+                                Line Loop(5) = {1,2,3,4};
+                                Plane Surface(6) = {5};
 
-entrance_plate[] = Extrude{0, 0, -0.005} { Surface {6}; };
+                                entrance_plate[] = Extrude{0, 0, -0.005} { Surface {6}; };
 
-Point(106) = { 0, 0, zmax, h };
-Point(107) = {rmax,0,zmax,h};
-Point(108) = {0,rmax,zmax,h};
-Point(109) = {-rmax,0,zmax,h};
-Point(110) = {0,-rmax,zmax,h};
+                                Point(106) = { 0, 0, zmax, h };
+                                Point(107) = {rmax,0,zmax,h};
+                                Point(108) = {0,rmax,zmax,h};
+                                Point(109) = {-rmax,0,zmax,h};
+                                Point(110) = {0,-rmax,zmax,h};
 
-Circle(107) = {107,106,108};
-Circle(108) = {108,106,109};
-Circle(109) = {109,106,110};
-Circle(110) = {110,106,107};
+                                Circle(107) = {107,106,108};
+                                Circle(108) = {108,106,109};
+                                Circle(109) = {109,106,110};
+                                Circle(110) = {110,106,107};
 
-Line Loop(111) = {-107,-108,-109,-110};
-Plane Surface(112) = {111};
+                                Line Loop(111) = {-107,-108,-109,-110};
+                                Plane Surface(112) = {111};
 
-exit_plate[] = Extrude{0, 0, 0.005} { Surface {112}; };
+                                exit_plate[] = Extrude{0, 0, 0.005} { Surface {112}; };
 
-Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
-"""
+                                Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
+                                """
                 # noinspection PyCallingNonCallable
                 if self._debug:
                     with open("cyl_str.geo", "w") as _of:
@@ -1749,181 +1797,181 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
 
             # Generate text for Inventor macro
             header_text = """Sub CreateRFQElectrode{}()
-    Dim oApp As Application
-    Set oApp = ThisApplication
+                            Dim oApp As Application
+                            Set oApp = ThisApplication
 
-    ' Get a reference to the TransientGeometry object.
-    Dim tg As TransientGeometry
-    Set tg = oApp.TransientGeometry
+                            ' Get a reference to the TransientGeometry object.
+                            Dim tg As TransientGeometry
+                            Set tg = oApp.TransientGeometry
 
-    Dim oPart As PartDocument
-    Dim oCompDef As PartComponentDefinition
-    Dim oSketch3D As Sketch3D
-    Dim oSpline As SketchSpline3D
-    Dim vertexCollection1 As ObjectCollection
+                            Dim oPart As PartDocument
+                            Dim oCompDef As PartComponentDefinition
+                            Dim oSketch3D As Sketch3D
+                            Dim oSpline As SketchSpline3D
+                            Dim vertexCollection1 As ObjectCollection
 
-""".format(direction)
+                        """.format(direction)
 
             electrode_text = """
-    Set oPart = oApp.Documents.Add(kPartDocumentObject, , True)
-    Set oCompDef = oPart.ComponentDefinition
-    Set oSketch3D = oCompDef.Sketches3D.Add
-    Set vertexCollection1 = oApp.TransientObjects.CreateObjectCollection(Null)
+                            Set oPart = oApp.Documents.Add(kPartDocumentObject, , True)
+                            Set oCompDef = oPart.ComponentDefinition
+                            Set oSketch3D = oCompDef.Sketches3D.Add
+                            Set vertexCollection1 = oApp.TransientObjects.CreateObjectCollection(Null)
 
-    FileName = "{}"
-    fileNo = FreeFile 'Get first free file number
+                            FileName = "{}"
+                            fileNo = FreeFile 'Get first free file number
 
-    Dim minHeight As Double
-    minHeight = 10000  'cm, large number
+                            Dim minHeight As Double
+                            minHeight = 10000  'cm, large number
 
-    Open FileName For Input As #fileNo
-    Do While Not EOF(fileNo)
+                            Open FileName For Input As #fileNo
+                            Do While Not EOF(fileNo)
 
-        Dim strLine As String
-        Line Input #1, strLine
+                                Dim strLine As String
+                                Line Input #1, strLine
 
-        strLine = Trim$(strLine)
+                                strLine = Trim$(strLine)
 
-        If strLine <> "" Then
-            ' Break the line up, using commas as the delimiter.
-            Dim astrPieces() As String
-            astrPieces = Split(strLine, ",")
-        End If
+                                If strLine <> "" Then
+                                    ' Break the line up, using commas as the delimiter.
+                                    Dim astrPieces() As String
+                                    astrPieces = Split(strLine, ",")
+                                End If
 
-        Call vertexCollection1.Add(tg.CreatePoint(astrPieces(0), astrPieces(1), astrPieces(2)))
+                                Call vertexCollection1.Add(tg.CreatePoint(astrPieces(0), astrPieces(1), astrPieces(2)))
 
-        ' For X vane this is idx 0, for y vane it is idx 1
-        If CDbl(astrPieces({})) < minHeight Then
-            minHeight = CDbl(astrPieces({}))
-        End If
+                                ' For X vane this is idx 0, for y vane it is idx 1
+                                If CDbl(astrPieces({})) < minHeight Then
+                                    minHeight = CDbl(astrPieces({}))
+                                End If
 
-    Loop
+                            Loop
 
-    Close #fileNo
+                            Close #fileNo
 
-    Set oSpline = oSketch3D.SketchSplines3D.Add(vertexCollection1)
+                            Set oSpline = oSketch3D.SketchSplines3D.Add(vertexCollection1)
 
-""".format(os.path.join(save_folder, "Vane_{}.txt".format(direction)), AXES[direction], AXES[direction])
+                            """.format(os.path.join(save_folder, "Vane_{}.txt".format(direction)), AXES[direction], AXES[direction])
 
             sweep_text = """
-    ' Now make a sketch to be swept
-    ' Start with a work plane
-    Dim oWP As WorkPlane
-    Set oWP = oCompDef.WorkPlanes.AddByNormalToCurve(oSpline, oSpline.StartSketchPoint)
-    
-    ' Add a 2D sketch
-    Dim oSketch2D As PlanarSketch
-    Set oSketch2D = oCompDef.Sketches.Add(oWP)
-"""
+                                ' Now make a sketch to be swept
+                                ' Start with a work plane
+                                Dim oWP As WorkPlane
+                                Set oWP = oCompDef.WorkPlanes.AddByNormalToCurve(oSpline, oSpline.StartSketchPoint)
+                                
+                                ' Add a 2D sketch
+                                Dim oSketch2D As PlanarSketch
+                                Set oSketch2D = oCompDef.Sketches.Add(oWP)
+                            """
             if direction == "X":
                 sweep_text += """
-    ' Make sure the orientation of the sketch is correct
-    ' We want the sketch x axis oriented with the lab y axis for X vane
-    oSketch2D.AxisEntity = oCompDef.WorkAxes.Item(2)
-"""
+                                ' Make sure the orientation of the sketch is correct
+                                ' We want the sketch x axis oriented with the lab y axis for X vane
+                                oSketch2D.AxisEntity = oCompDef.WorkAxes.Item(2)
+                            """
             else:
                 sweep_text += """
-    ' Make sure the orientation of the sketch is correct
-    ' We want the sketch x axis oriented with the lab y axis for X vane
-    oSketch2D.AxisEntity = oCompDef.WorkAxes.Item(1)
-    ' Also, we need to flip the axis for Y vanes
-    oSketch2D.NaturalAxisDirection = False
-"""
+                                ' Make sure the orientation of the sketch is correct
+                                ' We want the sketch x axis oriented with the lab y axis for X vane
+                                oSketch2D.AxisEntity = oCompDef.WorkAxes.Item(1)
+                                ' Also, we need to flip the axis for Y vanes
+                                oSketch2D.NaturalAxisDirection = False
+                            """
             sweep_text += """
-    ' Draw the half circle and block
-    Dim radius As Double
-    Dim height As Double
-    
-    radius = {}  'cm
-    height = {}  'cm
-    
-    Dim oOrigin As SketchEntity
-    Set oOrigin = oSketch2D.AddByProjectingEntity(oSpline.StartSketchPoint)
-""".format(self._variables_inventor["vane_radius"] * 100.0,
-           self._variables_inventor["vane_height"] * 100.0)
+                                ' Draw the half circle and block
+                                Dim radius As Double
+                                Dim height As Double
+                                
+                                radius = {}  'cm
+                                height = {}  'cm
+                                
+                                Dim oOrigin As SketchEntity
+                                Set oOrigin = oSketch2D.AddByProjectingEntity(oSpline.StartSketchPoint)
+                                """.format(self._variables_inventor["vane_radius"] * 100.0,
+                                       self._variables_inventor["vane_height"] * 100.0)
 
             sweep_text += """
-    Dim oCenter As Point2d
-    Set oCenter = tg.CreatePoint2d(oOrigin.Geometry.X, oOrigin.Geometry.Y - radius)
-    
-    Dim oCirc1 As Point2d
-    Set oCirc1 = tg.CreatePoint2d(oOrigin.Geometry.X - radius, oOrigin.Geometry.Y - radius)
-    
-    Dim oCirc2 As Point2d
-    Set oCirc2 = tg.CreatePoint2d(oOrigin.Geometry.X + radius, oOrigin.Geometry.Y - radius)
-    
-    Dim arc As SketchArc
-    Set arc = oSketch2D.SketchArcs.AddByThreePoints(oCirc1, oOrigin.Geometry, oCirc2)
-    
-"""
+                                Dim oCenter As Point2d
+                                Set oCenter = tg.CreatePoint2d(oOrigin.Geometry.X, oOrigin.Geometry.Y - radius)
+                                
+                                Dim oCirc1 As Point2d
+                                Set oCirc1 = tg.CreatePoint2d(oOrigin.Geometry.X - radius, oOrigin.Geometry.Y - radius)
+                                
+                                Dim oCirc2 As Point2d
+                                Set oCirc2 = tg.CreatePoint2d(oOrigin.Geometry.X + radius, oOrigin.Geometry.Y - radius)
+                                
+                                Dim arc As SketchArc
+                                Set arc = oSketch2D.SketchArcs.AddByThreePoints(oCirc1, oOrigin.Geometry, oCirc2)
+                                
+                                """
             sweep_text += """
-    Dim line1 As SketchLine
-    Set line1 = oSketch2D.SketchLines.AddByTwoPoints(arc.EndSketchPoint, arc.StartSketchPoint)
+                                Dim line1 As SketchLine
+                                Set line1 = oSketch2D.SketchLines.AddByTwoPoints(arc.EndSketchPoint, arc.StartSketchPoint)
 
-    ' Create a Path
-    Dim oPath As Path
-    Set oPath = oCompDef.Features.CreatePath(oSpline)
-    
-    ' Create a profile.
-    Dim oProfile As Profile
-    Set oProfile = oSketch2D.Profiles.AddForSolid
-    
-    ' Create the sweep feature.
-    Dim oSweep As SweepFeature
-    Set oSweep = oCompDef.Features.SweepFeatures.AddUsingPath(oProfile, oPath, kJoinOperation)
-"""
+                                ' Create a Path
+                                Dim oPath As Path
+                                Set oPath = oCompDef.Features.CreatePath(oSpline)
+                                
+                                ' Create a profile.
+                                Dim oProfile As Profile
+                                Set oProfile = oSketch2D.Profiles.AddForSolid
+                                
+                                ' Create the sweep feature.
+                                Dim oSweep As SweepFeature
+                                Set oSweep = oCompDef.Features.SweepFeatures.AddUsingPath(oProfile, oPath, kJoinOperation)
+                                """
 
-            # Small modification depending on absolute or relative vane height:
+                                        # Small modification depending on absolute or relative vane height:
             if self._variables_inventor["vane_height_type"] == 'relative':
                 sweep_text += """
-    ' Create another work plane above the vane
-    Dim oWP2 As WorkPlane
-    Set oWP2 = oCompDef.WorkPlanes.AddByPlaneAndOffset(oCompDef.WorkPlanes.Item({}), minHeight + height)
-""".format(AXES[direction] + 1)  # X is 0 and Y is 1, but the correct plane indices are 1 and 2
+                                ' Create another work plane above the vane
+                                Dim oWP2 As WorkPlane
+                                Set oWP2 = oCompDef.WorkPlanes.AddByPlaneAndOffset(oCompDef.WorkPlanes.Item({}), minHeight + height)
+                                """.format(AXES[direction] + 1)  # X is 0 and Y is 1, but the correct plane indices are 1 and 2
             else:
                 sweep_text += """
-    ' Create another work plane above the vane
-    Dim oWP2 As WorkPlane
-    Set oWP2 = oCompDef.WorkPlanes.AddByPlaneAndOffset(oCompDef.WorkPlanes.Item({}), height)
-""".format(AXES[direction] + 1)  # X is 0 and Y is 1, but the correct plane indices are 1 and 2
+                                ' Create another work plane above the vane
+                                Dim oWP2 As WorkPlane
+                                Set oWP2 = oCompDef.WorkPlanes.AddByPlaneAndOffset(oCompDef.WorkPlanes.Item({}), height)
+                                """.format(AXES[direction] + 1)  # X is 0 and Y is 1, but the correct plane indices are 1 and 2
 
             sweep_text += """
-    ' Start a sketch
-    Set oSketch2D = oCompDef.Sketches.Add(oWP2)
-    
-    ' Project the bottom face of the sweep
-    ' (start and end face might be tilted and contribute)
-    ' at this point I don't know how Inventor orders the faces, 2 is my best guess but
-    ' might be different occasionally... -DW
-    Dim oEdge As Edge
-    For Each oEdge In oSweep.SideFaces.Item(2).Edges
-        Call oSketch2D.AddByProjectingEntity(oEdge)
-    Next
+                                ' Start a sketch
+                                Set oSketch2D = oCompDef.Sketches.Add(oWP2)
+                                
+                                ' Project the bottom face of the sweep
+                                ' (start and end face might be tilted and contribute)
+                                ' at this point I don't know how Inventor orders the faces, 2 is my best guess but
+                                ' might be different occasionally... -DW
+                                Dim oEdge As Edge
+                                For Each oEdge In oSweep.SideFaces.Item(2).Edges
+                                    Call oSketch2D.AddByProjectingEntity(oEdge)
+                                Next
 
-    ' Create a profile.
-    Set oProfile = oSketch2D.Profiles.AddForSolid
+                                ' Create a profile.
+                                Set oProfile = oSketch2D.Profiles.AddForSolid
 
-    ' Extrude
-    Dim oExtDef As ExtrudeDefinition
-    Dim oExt As ExtrudeFeature
-    Set oExtDef = oCompDef.Features.ExtrudeFeatures.CreateExtrudeDefinition(oProfile, kJoinOperation)
-    Call oExtDef.SetToNextExtent(kNegativeExtentDirection, oSweep.SurfaceBody)
-    Set oExt = oCompDef.Features.ExtrudeFeatures.Add(oExtDef)
+                                ' Extrude
+                                Dim oExtDef As ExtrudeDefinition
+                                Dim oExt As ExtrudeFeature
+                                Set oExtDef = oCompDef.Features.ExtrudeFeatures.CreateExtrudeDefinition(oProfile, kJoinOperation)
+                                Call oExtDef.SetToNextExtent(kNegativeExtentDirection, oSweep.SurfaceBody)
+                                Set oExt = oCompDef.Features.ExtrudeFeatures.Add(oExtDef)
 
-    ' Repeat but cutting in the up-direction
-    ' Extrude
-    Set oExtDef = oCompDef.Features.ExtrudeFeatures.CreateExtrudeDefinition(oProfile, kCutOperation)
-    Call oExtDef.SetThroughAllExtent(kPositiveExtentDirection)
-    Set oExt = oCompDef.Features.ExtrudeFeatures.Add(oExtDef)
-"""
+                                ' Repeat but cutting in the up-direction
+                                ' Extrude
+                                Set oExtDef = oCompDef.Features.ExtrudeFeatures.CreateExtrudeDefinition(oProfile, kCutOperation)
+                                Call oExtDef.SetThroughAllExtent(kPositiveExtentDirection)
+                                Set oExt = oCompDef.Features.ExtrudeFeatures.Add(oExtDef)
+                                """
 
-            footer_text = """
-    oPart.UnitsOfMeasure.LengthUnits = kMillimeterLengthUnits
+            footer_text =   """
+                                oPart.UnitsOfMeasure.LengthUnits = kMillimeterLengthUnits
 
-    ThisApplication.ActiveView.Fit
+                                ThisApplication.ActiveView.Fit
 
-End Sub
-"""
+                            End Sub
+                            """
 
             # Write the Autodesk Inventor VBA macros:
             with open(os.path.join(save_folder, "Vane_{}.ivb".format(direction)), "w") as outfile:
@@ -1984,6 +2032,228 @@ End Sub
                 outfile.write("Z End: {} m\n".format(z_end))
 
         return 0
+
+    def install(self):
+        # Parameters: None
+        # Returns: None
+        # Installs the field and conductors into Warp
+        if self._from_cells:
+            if self._twoterm:
+                self._field.generate_field_from_cells_tt()
+            elif (self._boundarymethod):
+                self.generate_field_bempp()
+
+        
+
+        self._sim_end = self._field._zmax + self.sim_end_buffer
+
+        self.import_field()
+        
+        self.create_vanes()
+
+    def generate_field_bempp(self):
+        self.set_bempp_parameter("add_endplates", self.add_endplates)
+        self.set_bempp_parameter("cyl_id", self.cyl_id)
+        self.set_bempp_parameter("grid_res", self.grid_res_bempp)
+        self.set_bempp_parameter("pot_shift", self.pot_shift)
+
+        print("Generating vanes")
+        ts = time.time()
+        self.generate_vanes()
+        print("Generating vanes took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
+
+        print("Generating full mesh for BEMPP")
+        ts = time.time()
+        self.generate_full_mesh()
+        print("Meshing took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
+
+        print("Solving BEMPP problem")
+        ts = time.time()
+        self.solve_bempp()
+        print("Solving BEMPP took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
+
+        print("Calculating Potential")
+        ts = time.time()
+        myres = [self.resolution, self.resolution, self.resolution]
+
+        self.calculate_potential(limits=((self.xy_limits[0], self.xy_limits[1]),
+                                         (self.xy_limits[2], self.xy_limits[3]),
+                                         (self.z_limits[0], self.z_limits[1])),
+                                  res=myres,
+                                  domain_decomp=(1, 1, 50),
+                                  overlap=0)
+        print("Potential took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
+
+        ##########################
+        # TODO: PARSE FIELD HERE #
+        ##########################
+        exit(1)
+
+
+    def setup(self):
+        # Parameters: None
+
+        if (not self.vane_radius) and (self.simple_rods):
+            print("Please specify the vane radius (vane_radius) for the simple rod structure. Exiting.")
+            exit(1)
+        if (not self.vane_distance):
+            print("Please specify the vane distance (vane_distance) from axis. Exiting.")
+            exit(1)
+        if (not self.rf_freq):
+            print("The RF frequency (rf_freq) must be specified. Exiting")
+            exit(1)
+        if (self._from_cells and self._twoterm):
+            if self._twoterm:
+                print("Resolution is {}".format(self.resolution))
+                if (not self.xy_limits) or (np.shape(self.xy_limits) != (4,)):
+                    print("Please set XY limits (xy_limits) in the form of a list [xmin, xmax, ymin, ymax]")
+                    exit(1)
+                if (not self._voltage):
+                    print("Please set vane voltage (voltage) for two term potential calculation")
+                    exit(1)
+                elif (not self.tt_a_init):
+                    print("Please set initial aperture (tt_a_init) for two term potential calculation")
+                    exit(1)
+            if self._boundarymethod:
+                if (not self.cyl_id):
+                    print("Please set [asdfasdfasdf] (cyl_id) for boundary method calculation")
+                    exit(1)
+                if (not self.grid_res_bempp):
+                    print("Please set boundary method grid resolution (grid_res_bempp)")
+                    exit(1)
+                if (not self.pot_shift):
+                    print("Please set potential shift (pot_shift) for boundary method.")
+                    exit(1)
+                if (not self.z_limits):
+                    print("Please provide z limits (z_limits) for BEMPP calculation.")
+                    exit(1)
+
+        self.tt_frequency = self.rf_freq
+
+
+        if self._from_cells:
+            if (self._twoterm):
+                self._field.load_field_from_cells_tt(self._voltage, 
+                                                  self.tt_frequency,
+                                                  self.tt_a_init,
+                                                  self.xy_limits,
+                                                  self._filename, resolution=self.resolution)
+            elif (self._boundarymethod):
+                if (self.add_cells_from_file(filename=self._filename, ignore_rms=True)==1):
+                    print("Something went wrong. Please check your file.")
+                    exit(1)
+
+        else:
+            self._field.load_field_from_file(self._filename)
+
+
+    def import_field(self):
+        # import_field
+        # Parameters: none
+        # Returns: none
+        # Loads the appropriate field into Warp simulation.
+
+        def fieldscaling(time):
+            val = np.cos(time * 2 * np.pi * self.rf_freq)
+            print(time, val)
+            self._ray.append(val)
+            return val
+
+        egrd = field.addnewegrddataset(ex=self._field._ex, 
+                         ey=self._field._ey,
+                         ez=self._field._ez,
+                         dx=self._field._dx,
+                         dy=self._field._dy,
+                         zlength=self._field._z_length)
+        
+        print("=====================================")
+        print("xmin: " + str(self._field._xmin))
+        print("ymin {}".format(self._field._ymin))
+        print("nx {} ny {} nz {}".format(self._field._nx,self._field._ny,self._field._nz))
+        print("dx {} dy {} dz {}".format(self._field._dx,self._field._dy,self._field._dz))
+        print("======================================")
+        
+        addnewegrd(id=egrd, zs=0, xs=self._field._xmin, ys=self._field._ymin, ze=self._field._z_length, func=fieldscaling)
+
+
+    def create_vanes(self):
+        # create_vanes
+        # Parameters: None
+        # Returns: None
+        # Creates the conducting objects in the warp simulation.
+        # Vanes and outer tube.
+
+        length = self._field._z_length
+        zcent  = (self._field._z_length / 2.0) + abs(self.zstart)
+
+        print("length of shell: {}".format(self._sim_end - self.sim_start))
+        print("simstart {}    simend {}".format(self.sim_start, self._sim_end))
+
+        print("zmin {}  zmax {}".format(self._field._zmax, self._field._zmin))
+        print("simend {} simstart {}".format(self._sim_end, self.sim_start))
+
+        outer_shell = ZCylinderOut(self.vane_distance + 0.05, (self._sim_end - self.sim_start), zcent=(self._sim_end + self.sim_start)/2)
+
+        rod1 = ZCylinder(self.vane_radius, length, zcent=zcent, xcent=self.vane_distance)
+        rod2 = ZCylinder(self.vane_radius, length, zcent=zcent, xcent=-self.vane_distance) 
+        rod3 = ZCylinder(self.vane_radius, length, zcent=zcent, ycent=self.vane_distance)
+        rod4 = ZCylinder(self.vane_radius, length, zcent=zcent, ycent=-self.vane_distance)
+        total_conductors = outer_shell + rod1 + rod2 + rod3 + rod4
+        
+        installconductor(total_conductors)
+        scraper = ParticleScraper(total_conductors)
+
+        self._conductors = total_conductors
+
+    def plot_efield(self):
+        # Plots the e field along the z axis
+        # Parameters: None
+        # Returns: None
+
+        plotegrd(component="z", iy=self._field._ny, ix=self._field._nx)
+        fma()
+
+        plotegrd(component="x", ix=self._field._nx, iy=self._field._ny)
+        fma()
+
+        plotegrd(component="y", iy=self._field._ny, ix=self._field._nx)
+        fma()
+
+        
+        # plotegrd(component="x", iz=50)
+        # fma()
+        #plotegrd(component="y", iz=50)
+        #fma()
+    
+    def add_cell(self,
+                 cell_type,
+                 aperture,
+                 modulation,
+                 length,
+                 flip_z=False,
+                 shift_cell_no=False):
+
+        if (self._twoterm):
+            self._field.add_cell(cell_type, aperture, modulation, length, flip_z, shift_cell_no)
+        elif (self._boundarymethod):
+            self.append_cell(cell_type, aperture, modulation, length, flip_z=flip_z, shift_cell_no=shift_cell_no)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 if __name__ == "__main__":

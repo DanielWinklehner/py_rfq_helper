@@ -224,4 +224,7 @@ class RFQ(object):
                  flip_z=False,
                  shift_cell_no=False):
 
-        self._field.add_cell(cell_type, aperture, modulation, length, flip_z, shift_cell_no)
+        if (self._twoterm):
+            self._field.add_cell(cell_type, aperture, modulation, length, flip_z, shift_cell_no)
+        elif (self._boundarymethod):
+            self.append_cell(cell_type, aperture, modulation, length, flip_z=flip_z, shift_cell_no=shift_cell_no)
