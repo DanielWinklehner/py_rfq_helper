@@ -2165,7 +2165,7 @@ class PyRFQ(object):
                          dx=self._field._dx,
                          dy=self._field._dy,
                          zlength=self._field._z_length)
-        
+
         print("=====================================")
         print("xmin: " + str(self._field._xmin))
         print("ymin {}".format(self._field._ymin))
@@ -2175,6 +2175,10 @@ class PyRFQ(object):
         
         addnewegrd(id=egrd, zs=0, xs=self._field._xmin, ys=self._field._ymin, ze=self._field._z_length, func=fieldscaling)
 
+        # winon()
+        # self.plot_efield()
+        # fma()
+        # exit(1)
 
     def create_vanes(self):
         # create_vanes

@@ -313,7 +313,7 @@ class FieldGenerator(object):
         self._colors = MyColors()
 
         self._filename = None
-        self._parameters = None
+        self._parameters = []
         self._nrms = None
         self._max_cells = 0
         self._plot_tcs_vanes = False
@@ -372,13 +372,19 @@ class FieldGenerator(object):
                  flip_z=False,
                  shift_cell_no=False):
 
-        assert cell_type in ["RMS", "NCS", "TCS", "DCS"], "cell_type must be one of RMS, NCS, TCS, DCS!"
+        assert cell_type in ["STA", "RMS", "NCS", "TCS", "DCS"], "cell_type must be one of RMS, NCS, TCS, DCS!"
 
-        cell_no = self._parameters[-1]["cell no"] + 1
-        cumulative_length = self._parameters[-1]["cumulative length"] + length
+        if (len(self._parameters) == 0):
+            cell_no = 1
+            cumulative_length = length
+        else:
+            cell_no = self._parameters[-1]["cell no"] + 1
+            cumulative_length = self._parameters[-1]["cumulative length"] + length
 
         data = tuple([cell_type, flip_z, shift_cell_no, cell_no, 0.0, 0.0,
                       aperture, modulation, 0.0, length, cumulative_length])
+
+        print(data)
         self._parameters = np.append(self._parameters, [np.array(data, dtype=self._cell_dtype)], axis=0)
 
         return 0
@@ -443,17 +449,43 @@ class FieldGenerator(object):
                     break
 
                 items = line.strip().split()
-                print(items)
-                if (len(items) ==  16) and ("T" not in items[0]):
-                    data.append(tuple(["NCS", False, False]) + tuple([items[0], 0.0, 0.0, items[7], items[8], 0.0, items[10], items[11]]))
+                cell_no = items[0]
+                params = [float(item) for item in items[1:]]
 
-            self._parameters = np.array(data, dtype=self._cell_dtype)
+                if len(items) == 10 and cell_no == "0":
+                    if len(self._parameters) == 0:
+                        self._parameters.append(np.array(("STA", False, False, 1, 0.0, 0.0, 
+                                                     params[6] * 0.01,
+                                                     params[7], 0.0, 0.0, 0.0), dtype=self._cell_dtype))
 
-            if self._nrms is None:
-                self._nrms = len(np.where(self._parameters["modulation"] == 1.0)[0])
-                print("I found {} cells with modulation 1 in the file..."
-                      "assuming this is the entrance Radial Matching Section (RMS)."
-                      " If this is incorrect, plase specify manually.".format(self._nrms))
+                    
+                    continue
+
+                if "T" in cell_no or "M" in cell_no or "F" in cell_no:
+                    print("Ignored cell {}".format(cell_no))
+                    continue
+
+
+                if params[7] == 1.0:
+                    cell_type = "RMS"
+
+                else:
+                    cell_type = "NCS"
+
+                print("Cell no:  {}   Cell type:   {}".format(cell_no, cell_type))
+
+                self.add_cell(cell_type=cell_type,
+                              aperture=params[6] * 0.01,
+                              modulation=params[7],
+                              length=params[9] * 0.01,
+                              flip_z=False,
+                              shift_cell_no=False)
+
+        if self._nrms is None:
+            self._nrms = len(np.where(self._parameters["modulation"] == 1.0)[0])
+            
+
+        return 0
 
 
     def save_field_to_file(self, filename):
@@ -949,6 +981,8 @@ class FieldGenerator(object):
         # b_match = self._parameters[self._nrms + 1]["focusing factor"]
         rms_length = self._parameters[self._nrms - 1]["cumulative length"]
 
+        print(rms_length)
+
         rms_idx = np.where(self._mesh_z <= rms_length)
 
         print("Calculating Radial Matching Section from z = {} m to {} m".format(0.0, rms_length))
@@ -958,6 +992,7 @@ class FieldGenerator(object):
         rms_a = interp1d(np.append(np.array([0.0]), self._parameters["cumulative length"][:self._nrms]),
                          np.append(np.array([self._a_init]), self._parameters["aperture"][:self._nrms]),
                          kind="cubic")
+
 
         self.calculate_pot_rms(rms_idx, rms_a)
         # self.calculate_e_from_pot(rms_idx)
@@ -1029,7 +1064,8 @@ class FieldGenerator(object):
 
         # Omit RMS if there are no cells with modulation 1
         if self._nrms > 0:
-            self.calculate_rms_in()
+            print("within the self nrms!")
+            #self.calculate_rms_in()
         # Loop over all remaining cells starting after RMS
         for cn, cell_parameters in enumerate(self._parameters[self._nrms:]):
 
@@ -1515,27 +1551,30 @@ if __name__ == "__main__":
     # loadpath = os.path.join(folder, r"Parm_50_last3.dat")
     #savepath = os.path.join(".", r"vecc_rfq_003_py.dat")
     #savepath = os.path.join(".", r"vecc_rfq_004_py.dat")
-    savepath = os.path.join('.', r"fieldw015width.dat")
+    #savepath = os.path.join('.', r"fieldw015width.dat")
+    savepath = os.path.join('.', r"parmteqresults.dat")
+
 
     operapath = os.path.join(folder, "Transition_cell_pot_field.table")
     #loadpath = r"Parm_50_last3.dat"
-    loadpath = r"input/Parm_50_63cells.dat"
-    fg = FieldGenerator(resolution=0.002)
+    loadpath = r"input/PARMTEQOUT.TXT"
+    #loadpath = r"input/Parm_50_63cells.dat"
+    fg = FieldGenerator(resolution=0.002, xy_limits=[-0.015, 0.015, -0.015, 0.015])
     fg.set_bempp_mesh_size(0.002)
 
     fg.load_parameters_from_file(filename=loadpath)
 
-    fg.add_cell(cell_type="TCS",
+    # fg.add_cell(cell_type="TCS",
 
-                aperture=0.011255045027294745,
-                modulation=1.6686390559337798,
-                length=0.0427)
-    # 0.10972618296477678
+    #             aperture=0.011255045027294745,
+    #             modulation=1.6686390559337798,
+    #             length=0.0427)
+    # # 0.10972618296477678
 
-    fg.add_cell(cell_type="DCS",
-                aperture=0.015017826368066015,
-                modulation=1.0,
-                length=0.13)
+    # fg.add_cell(cell_type="DCS",
+    #             aperture=0.015017826368066015,
+    #             modulation=1.0,
+    #             length=0.13)
 
     # Second Drift is necessary to keep cell count correct
     # fg.add_cell(cell_type="DCS",

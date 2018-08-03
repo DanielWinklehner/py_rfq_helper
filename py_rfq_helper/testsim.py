@@ -64,7 +64,7 @@ top.injctspc = 1000000
 ##########################################
 # RFQ creation and initialization of parameters
 
-rfq = PyRFQ(filename=FILENAME, from_cells=True, twoterm=False, boundarymethod=True)
+rfq = PyRFQ(filename=FILENAME, from_cells=True, twoterm=True, boundarymethod=False)
 rfq.vane_radius       = VANE_RAD
 rfq.vane_distance     = VANE_DIST
 rfq.zstart            = Z_START
@@ -86,11 +86,11 @@ rfq.pot_shift      = 3.0 * 22000.0
 
 rfq.setup()
 
-rfq.add_cell(cell_type="TCS",
+# rfq.add_cell(cell_type="TCS",
 
-            aperture=0.011255045027294745,
-            modulation=1.6686390559337798,
-            length=0.0427)
+#             aperture=0.011255045027294745,
+#             modulation=1.6686390559337798,
+#             length=0.0427)
 # 0.10972618296477678
 
 # rfq.add_cell(cell_type="DCS",
@@ -207,7 +207,7 @@ def makeplots():
 
 starttime = time.time()
 
-step(1000)
+step(2000)
 hcp()
 
 endtime = time.time()
