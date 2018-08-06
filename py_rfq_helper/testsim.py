@@ -73,7 +73,7 @@ rfq.sim_start         = SIM_START
 rfq.sim_end_buffer    = 0.2
 rfq.resolution        = 0.002
 
-rfq.xy_limits         = [-0.015, 0.015, -0.015, 0.015]
+rfq.xy_limits         = [-0.08, 0.08, -0.08, 0.08]
 rfq.z_limits           = [0, 1.4]
 rfq.tt_voltage        = 50.0e3
 rfq._voltage = 50.0e3
