@@ -3,7 +3,7 @@ from warp import *
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.constants as const
-from field_from_two_term_potential import *
+#from field_from_two_term_potential import *
 from py_rfq_designer import *
 
 # FILENAME = "vecc_rfq_003_py.dat"
@@ -109,6 +109,17 @@ class FieldLoader(object):
         if myrfq.add_cells_from_file(filename=filename, ignore_rms=True) == 1:
             print("Something went wrong. Please check your file.")
             exit(1)
+
+
+        myrfq.append_cell(cell_type="TCS",
+                          aperture=0.007147,
+                          modulation=1.6778,
+                          length=0.033840)
+
+        myrfq.append_cell(cell_type="DCS",
+                          aperture=0.0095691183,
+                          modulation=1.0,
+                          length=0.1)
 
 
     def generate_field_from_cells_bempp(self, cyl_id, grid_res, pot_shift, add_endplates=True):
