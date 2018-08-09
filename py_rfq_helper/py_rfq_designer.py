@@ -102,7 +102,9 @@ rot_map = {"yp": 0.0,
 
 
 class FieldGenerator(object):
-    def __init__(self, resolution=0.001, xy_limits=None):
+    def __init__(self, resolution=0.001, xy_limits=None, ignore_rms=False,
+                 twoterm=True, eightterm=True):
+        
         self._colors = MyColors()
 
         self._filename = None
@@ -142,6 +144,7 @@ class FieldGenerator(object):
         self._vane_profile_x = None
         self._vane_profile_y = None
 
+        self._ignore_rms = ignore_rms
 
         self._vanes = []
 
@@ -261,6 +264,9 @@ class FieldGenerator(object):
 
                 if params[7] == 1.0:
                     cell_type = "RMS"
+                    if (self._ignore_rms):
+                        print("Ignored RMS cell!")
+                        continue
 
                 else:
                     cell_type = "NCS"
@@ -2205,7 +2211,7 @@ class PyRFQVane(object):
         return 0
 
 
-    #two term functions
+    # two term functions from field_from_two_term_potential.py
     def __add__(self, other):
 
         assert self.has_grid() and other.has_grid(), \
@@ -2493,33 +2499,32 @@ class PyRFQ(object):
 
         # User Parameters
         #     Passed in via constructor
-        self._from_cells     = from_cells
-        self._filename       = filename
-        self._twoterm        = twoterm
-        self._boundarymethod = boundarymethod
+        self._from_cells     = from_cells      # run and calculate from parmteq cells
+        self._filename       = filename        
+        self._twoterm        = twoterm         # Use Two Term potential method to calculate field
+        self._boundarymethod = boundarymethod  # Use BEMPP to calculate field
 
 
         #     Must be set outside of object creation
-        self.simple_rods    = True
-        self.vane_radius    = None
-        self.vane_distance  = None
-        self.rf_freq        = None
-        self.zstart         = 0.0
-        self.sim_start      = 0.0
-        self.sim_end_buffer = 0.0
+        self.simple_rods    = True  # cylindrical vanes
+        self.vane_radius    = None  # radius of simple rods
+        self.vane_distance  = None  # vane distance from axis
+        self.rf_freq        = None  # RF frequency
+        self.zstart         = 0.0   # start of the RFQ
+        self.sim_start      = 0.0   # start of the simulation
+        self.sim_end_buffer = 0.0   # added distance not part of RFQ but part of simulation
         self.resolution     = 0.002
 
+        self.xy_limits     = None   # X and Y limits in the field calculation
+        self.z_limits      = None   # Z limits for the field calculation
+        self.ignore_rms    = False
+
         # Two term variables
-        self.tt_frequency  = None
-        self.tt_a_init     = None
-
-
-        self.xy_limits     = None
-        self.z_limits      = None
+        self.tt_a_init     = None   # initial aperture size for two term potential calculation
 
         # Bempp variables
-        self.add_endplates = True
-        self.cyl_id        = None
+        self.add_endplates  = True
+        self.cyl_id         = None
         self.grid_res_bempp = None
         self.pot_shift      = None
 
@@ -3625,18 +3630,18 @@ class PyRFQ(object):
                     print("Please provide z limits (z_limits) for BEMPP calculation.")
                     exit(1)
 
-        self.tt_frequency = self.rf_freq
-
 
         if self._from_cells:
             if (self._twoterm):
                 self._field.load_field_from_cells_tt(self._voltage, 
-                                                  self.tt_frequency,
+                                                  self.rf_freq,
                                                   self.tt_a_init,
                                                   self.xy_limits,
-                                                  self._filename, resolution=self.resolution)
+                                                  self._filename, 
+                                                  resolution=self.resolution,
+                                                  ignore_rms=self.ignore_rms)
             elif (self._boundarymethod):
-                if (self.add_cells_from_file(filename=self._filename, ignore_rms=True)==1):
+                if (self.add_cells_from_file(filename=self._filename, ignore_rms=self.ignore_rms)==1):
                     print("Something went wrong. Please check your file.")
                     exit(1)
 
@@ -3694,13 +3699,16 @@ class PyRFQ(object):
         print("simend {} simstart {}".format(self._sim_end, self.sim_start))
 
         outer_shell = ZCylinderOut(self.vane_distance + 0.05, (self._sim_end - self.sim_start), zcent=(self._sim_end + self.sim_start)/2)
+        total_conductors = outer_shell
 
-        rod1 = ZCylinder(self.vane_radius, length, zcent=zcent, xcent=self.vane_distance)
-        rod2 = ZCylinder(self.vane_radius, length, zcent=zcent, xcent=-self.vane_distance) 
-        rod3 = ZCylinder(self.vane_radius, length, zcent=zcent, ycent=self.vane_distance)
-        rod4 = ZCylinder(self.vane_radius, length, zcent=zcent, ycent=-self.vane_distance)
-        total_conductors = outer_shell + rod1 + rod2 + rod3 + rod4
+        if (self.simple_rods):
+            rod1 = ZCylinder(self.vane_radius, length, zcent=zcent, xcent=self.vane_distance)
+            rod2 = ZCylinder(self.vane_radius, length, zcent=zcent, xcent=-self.vane_distance) 
+            rod3 = ZCylinder(self.vane_radius, length, zcent=zcent, ycent=self.vane_distance)
+            rod4 = ZCylinder(self.vane_radius, length, zcent=zcent, ycent=-self.vane_distance)
+            total_conductors += rod1 + rod2 + rod3 + rod4
         
+
         installconductor(total_conductors)
         scraper = ParticleScraper(total_conductors)
 
@@ -3738,11 +3746,6 @@ class PyRFQ(object):
             self._field.add_cell(cell_type, aperture, modulation, length, flip_z, shift_cell_no)
         elif (self._boundarymethod):
             self.append_cell(cell_type, aperture, modulation, length, flip_z=flip_z, shift_cell_no=shift_cell_no)
-
-
-
-
-
 
 
 

@@ -65,7 +65,7 @@ class FieldLoader(object):
         self.parse_field(x, y, z, e_x, e_y, e_z)
         
 
-    def load_field_from_cells_tt(self, voltage, frequency, a_init, xy_limits, filename=None, resolution=0.002):
+    def load_field_from_cells_tt(self, voltage, frequency, a_init, xy_limits, filename=None, resolution=0.002, ignore_rms=False):
         # Loads and calculates field from PARMTEQ file using Two Term potential method
 
         if filename is None:
@@ -76,7 +76,7 @@ class FieldLoader(object):
 
         loadpath = filename
 
-        self._fg = FieldGenerator(resolution=resolution, xy_limits=xy_limits)
+        self._fg = FieldGenerator(resolution=resolution, xy_limits=xy_limits, ignore_rms=ignore_rms)
 
         self._fg._voltage   = voltage
         self._fg._frequency = frequency
@@ -208,8 +208,4 @@ class FieldLoader(object):
         self._zmin = z.min()
         self._zmax = z.max()
 
-        print("===============================================")
-        print(self._zmax)
-        print(z)
-        print("===============================================")
 

@@ -73,16 +73,19 @@ rfq.sim_start         = SIM_START
 rfq.sim_end_buffer    = 0.2
 rfq.resolution        = 0.002
 
-rfq.xy_limits         = [-0.08, 0.08, -0.08, 0.08]
-rfq.z_limits           = [0, 1.4]
-rfq.tt_voltage        = 50.0e3
-rfq._voltage = 50.0e3
+rfq.xy_limits         = [-0.03, 0.03, -0.03, 0.03]
+rfq.z_limits          = [0, 1.4]
+rfq._voltage          = 22e3
 rfq.tt_a_init         = 0.038802
 
-rfq.add_endplates = True
-rfq.cyl_id        = 0.1
+rfq.add_endplates  = True
+rfq.cyl_id         = 0.1
 rfq.grid_res_bempp = 0.005 
 rfq.pot_shift      = 3.0 * 22000.0
+rfq.ignore_rms     = True
+
+
+rfq.simple_rods    = True
 
 rfq.setup()
 
@@ -103,6 +106,8 @@ rfq.setup()
 rfq.install()
 
 ############################################
+
+
 
 
 
@@ -146,7 +151,7 @@ def plotXZparticles(view=1):
 
     plsys(view)
 
-    plg([-PRWALL,PRWALL],[0,0], color=red)
+    plg([-PRWALL,PRWALL],[rfq._field._zmin, rfq._field._zmin], color=red)
     plg([-PRWALL,PRWALL],[rfq._field._zmax, rfq._field._zmax], color=red)
 
     rfq._conductors.draw()
@@ -158,7 +163,7 @@ def plotXZparticles(view=1):
 def plotYZparticles(view=1):
     plsys(view)
 
-    plg([-PRWALL,PRWALL],[0,0], color=red)
+    plg([-PRWALL,PRWALL],[rfq._field._zmin, rfq._field._zmin], color=red)
     plg([-PRWALL,PRWALL],[rfq._field._zmax, rfq._field._zmax], color=red)
     
     rfq._conductors.draw()
@@ -207,7 +212,7 @@ def makeplots():
 
 starttime = time.time()
 
-step(2000)
+step(1000)
 hcp()
 
 endtime = time.time()
@@ -220,7 +225,13 @@ part_z = beam.getz()
 
 print(len(part_x))
 
-with open("particleoutput.dump", 'w') as outfile:
+
+
+i = 0
+while os.path.exists("particle.%s.dump" % i):
+    i += 1
+
+with open("particle.%s.dump" % i, 'w') as outfile:
     outfile.write("x, y, z\n")
     for x, y, z in zip(part_x, part_y, part_z):
         outfile.write("{:.4e}   {:.4e}   {:.4e}\n".format(x, y, z))
