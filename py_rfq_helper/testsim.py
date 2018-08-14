@@ -4,8 +4,8 @@ from py_rfq_designer import *
 import time
 
 #FILENAME  = "input/vecc_rfq_004_py.dat"
-FILENAME  = "input/PARMTEQOUT.TXT"
-#FILENAME  = "input/Parm_50_63cells.dat"
+#FILENAME  = "input/PARMTEQOUT.TXT"
+FILENAME  = "input/Parm_50_63cells.dat"
 #FILENAME  = "input/fieldoutput.txt"
 #FILENAME   = "input/fieldw015width.dat"
 
@@ -32,7 +32,7 @@ w3d.ymmax =  PRWALL
 w3d.ymmin = -PRWALL
 w3d.ny    =  NY
 
-w3d.zmmax =  1.456 + 0.2
+w3d.zmmax =  1.456 + 0.5
 w3d.zmmin =  SIM_START
 w3d.nz    =  NZ
 
@@ -70,7 +70,7 @@ rfq.vane_distance     = VANE_DIST
 rfq.zstart            = Z_START
 rfq.rf_freq           = RF_FREQ
 rfq.sim_start         = SIM_START
-rfq.sim_end_buffer    = 0.2
+rfq.sim_end_buffer    = 0.5
 rfq.resolution        = 0.002
 
 rfq.xy_limits         = [-0.03, 0.03, -0.03, 0.03]
@@ -135,6 +135,7 @@ beam.a0 = 5 * mm  # initial x-envelope edge a = 2*sqrt(<(x-xc)^2>) [m]
 beam.b0 = 5 * mm  # initial y-envelope edge b = 2*sqrt(<(y-yc)^2>) [m]
 beam.ap0 = 0 # initial x-envelope angle ap = a' = d a/ds [rad]
 beam.bp0 = 0  # initial y-envelope angle bp = b' = d b/ds [rad]
+
 
 # This routine will calculate vbeam and other quantities.
 derivqty()
@@ -201,6 +202,21 @@ def beamplots():
     plotYphase()
     refresh()
 
+
+
+velocity_calculated = False
+zclose = rfq._field._zmax
+zfar = zclose + 0.01
+
+velocityarray = []
+average_velocity = 0.0
+wavelength = 0.0
+
+bunch_particles = []
+
+bunchfound = False
+        
+
 @callfromafterstep
 def makeplots():
     if top.it%1 == 0:
@@ -208,16 +224,55 @@ def makeplots():
         # window(0)
         # rfq.plot_efield()
         # refresh()
-        
+
+
+
+@callfromafterstep
+def find_bunch():
+    global bunchfound
+    global velocity_calculated
+    global zfar
+    global velocityarray
+
+    if (bunchfound):
+        return
+    if not velocity_calculated:
+        crossedZ = beam.selectparticles(zc=zclose)
+        velocities = beam.getvz()
+        particle_velocities = [velocities[i] for i in crossedZ]
+        velocityarray = velocityarray + particle_velocities
+        print("length: {}".format(len(velocityarray)))
+        if (len(velocityarray) > 10000):
+            print("found a velocity!!!!!!!!!")
+            average_velocity = np.mean(velocityarray)
+            velocity_calculated = True
+            wavelength = average_velocity / rfq.rf_freq
+            print("wavelength:  {}".format(wavelength))
+            velocity_calculated = True
+            zfar = zclose + wavelength
+        return
+
+    tot_particles = list(zip(beam.getx(), beam.gety(), beam.getz()))
+    #tot_particles = np.array(tot_particles)
+    
+    print("zclose: {}  zfar: {}".format(zclose, zfar))
+    particles = [item for item in tot_particles if (zclose < item[2] < zfar)]
+    z_positions = [item[2] for item in particles]
+    print("Result: {},  Desired: {}".format(np.mean(z_positions), np.around((zfar - zclose) / 2) + zclose))
+    if (np.around(np.mean(z_positions), decimals=3) == (np.around(((zfar - zclose) / 2) + zclose, decimals=3))):
+        print("==========================\nFound a bunch!\n=================================")
+        bunchfound = True
+        bunch_particles = particles
+        exit(1)
 
 starttime = time.time()
 
-step(1000)
+step(10000)
 hcp()
 
 endtime = time.time()
 
-print("Elapsed time for simulation: {}".format(endtime-starttime))
+print("Elapsed time for simulation: {} seconds".format(endtime-starttime))
 
 part_x = beam.getx()
 part_y = beam.gety()

@@ -2532,6 +2532,7 @@ class PyRFQ(object):
         self._conductors    = None
         self._field         = field.FieldLoader()
         self._sim_end       = 0.0
+        self._length        = 0.0
 
         # Debugging
         self._ray           = [] #debugging
@@ -3690,6 +3691,7 @@ class PyRFQ(object):
         # Vanes and outer tube.
 
         length = self._field._z_length
+        self._length = length
         zcent  = (self._field._z_length / 2.0) + abs(self.zstart)
 
         print("length of shell: {}".format(self._sim_end - self.sim_start))
