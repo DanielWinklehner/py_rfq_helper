@@ -47,12 +47,12 @@ print("Process {} of {} on host {} started!".format(rank, size, host))
 np.set_printoptions(threshold=10000)
 
 # For now, everything involving the pymodules with be done on master proc (rank 0)
-# if rank == 0:
-#     from dans_pymodules import *
+if rank == 0:
+    from dans_pymodules import *
 
-#     colors = MyColors()
-# else:
-#     colors = None
+    colors = MyColors()
+else:
+    colors = None
 
 decimals = 12
 
@@ -108,9 +108,9 @@ class PyRFQCell(object):
         assert cell_type in ["STA", "RMS", "NCS", "TCS", "DCS"], "cell_type must be one of RMS, NCS, TCS, DCS!"
 
         self._type = cell_type
-        self._aperture = aperture
-        self._modulation = modulation
-        self._length = length
+        self._aperture = np.round(aperture, decimals)
+        self._modulation = np.round(modulation, decimals)
+        self._length = np.round(length, decimals)
         self._flip_z = flip_z
         self._shift_cell_no = shift_cell_no
         self._profile_itp = None  # Interpolation of the cell profile
@@ -927,16 +927,25 @@ EndFor
 
         z = np.round(np.linspace(0.0, self._length, nz), decimals)
         vane = np.zeros(z.shape)
-        cum_len = 0.0
 
+        cum_len = 0.0
+        # count = 0
         for cell in self._cells:
 
             if cell.cell_type != "STA":
-                idx = np.where((z >= cum_len) & (z <= cum_len + cell.length))
+                _z_end = np.round(cum_len + cell.length, decimals)
+                idx = np.where((z >= cum_len) & (z <= _z_end))
+
+                # print("")
+                # print("Cell # {}".format(count))
+                # print("Cell extent: {} to {}".format(cum_len, _z_end))
+                # print("z_lab = [{};{}]".format(z[idx][0], z[idx][-1]))
+                # print("z_loc = [{};{}]".format(z[idx][0] - cum_len, z[idx][-1] - cum_len))
 
                 vane[idx] = cell.profile(np.round(z[idx] - cum_len, decimals))
 
-                cum_len += cell.length
+                cum_len = np.round(cum_len + cell.length, decimals)
+                # count += 1
 
         return z, vane
 
@@ -1993,20 +2002,24 @@ if __name__ == "__main__":
     #                   aperture=0.15,
     #                   modulation=1.0,
     #                   length=0.0)
+    myrfq.append_cell(cell_type="DCS",
+                      aperture=0.009289,
+                      modulation=1.0,
+                      length=0.04858)
 
     # Load the base RFQ design from the parmteq file
-    if myrfq.add_cells_from_file(filename="PARMTEQOUT.TXT", ignore_rms=True) == 1:
+    if myrfq.add_cells_from_file(ignore_rms=True) == 1:
         exit()
 
     myrfq.append_cell(cell_type="TCS",
-                      aperture=0.007147,
+                      aperture=0.006837,
                       modulation=1.6778,
-                      length=0.033840)
+                      length=0.032727)
 
     myrfq.append_cell(cell_type="DCS",
-                      aperture=0.0095691183,
+                      aperture=0.0091540593,
                       modulation=1.0,
-                      length=0.1)
+                      length=0.14)
 
     # myrfq.append_cell(cell_type="STA",
     #                   aperture=0.0095691183,
@@ -2101,14 +2114,14 @@ if __name__ == "__main__":
     myrfq.generate_vanes()
     print("Generating vanes took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
-    # if rank == 0:
-    #     myrfq.plot_vane_profile()
-    #     myrfq.write_inventor_macro(vane_type='vane',
-    #                                vane_radius=0.005,
-    #                                vane_height=0.15,
-    #                                vane_height_type='absolute',
-    #                                nz=600)
-    # exit()
+    if rank == 0:
+        myrfq.plot_vane_profile()
+        myrfq.write_inventor_macro(vane_type='vane',
+                                   vane_radius=0.0093,
+                                   vane_height=0.03,
+                                   vane_height_type='absolute',
+                                   nz=600)
+    exit()
 
     print("Generating full mesh for BEMPP")
     ts = time.time()
