@@ -1,5 +1,14 @@
+# py_rfq_utils.py
+# Written by Jared Hwang in August 2018
+# 
+# Contains the PyRfqUtils class designed to work in tandem with the RFQ object from 
+# the py_rfq_module (py_rfq_designer), and a corresponding WARP simulation.
+# 
+
 from warp import *
 import numpy as np
+import pickle
+import os
 
 class PyRfqUtils(object):
 
@@ -9,15 +18,49 @@ class PyRfqUtils(object):
         self._zclose = rfq._field._zmax
         self._zfar = self._zclose + 0.01
         self._velocityarray = []
+        self._velocityarray = np.array(self._velocityarray)
         self._average_velocity = 0.0
         self._wavelength = 0.0
-        self._bunch_particles = []
+        self._bunch_particles = {}
         self._bunchfound = False
         self._beam = beam
         self._rfq = rfq
         self._wavelengthbound = None
-        
-    def find_bunch(self):
+
+
+        self._max_steps_find_bunch = None
+
+        self._velocity_count = top.npinject * 150
+
+        winon(1, suffix='YZ')
+        winon(2, suffix="X'X")
+        winon(3, suffix="Y'Y")
+        winon()
+
+    def find_bunch(self, max_steps):
+        self._max_steps_find_bunch = top.it + max_steps
+        print("Find bunch!")
+        print(np.max(self._beam.getz()))
+        print(self._rfq._field._zmax)
+        if (np.max(self._beam.getz()) < self._rfq._field._zmax):
+            print("Particles have not yet reached the end of the RFQ. Abandoning bunch finding.")
+            return None
+
+        starttime = time.time()
+
+        for i in range(0, max_steps):
+            step(1)
+            self.measure_bunch()
+            if (self._bunchfound):
+                break
+
+        endtime = time.time()
+        print("It took {} seconds to find a bunch.".format(endtime - starttime))
+
+        return self._bunch_particles
+
+
+    def measure_bunch(self):
 
         if self._bunchfound:
             return
@@ -25,11 +68,11 @@ class PyRfqUtils(object):
         if not self._velocity_calculated:
             crossedZ = self._beam.selectparticles(zc=self._zclose)
             velocities = self._beam.getvz()
-            particle_velocities = [velocities[i] for i in crossedZ]
-            self._velocityarray = self._velocityarray + particle_velocities
+            particle_velocities = velocities[crossedZ]
+            self._velocityarray = np.concatenate((self._velocityarray, particle_velocities))
             print("length: {}".format(len(self._velocityarray)))
 
-            if (len(self._velocityarray) > 10000):
+            if (len(self._velocityarray) > self._velocity_count):
                 print("found a velocity!!!!!!!!!")
                 self._average_velocity = np.mean(self._velocityarray)
                 self._velocity_calculated = True
@@ -37,6 +80,7 @@ class PyRfqUtils(object):
                 print("self._wavelength:  {}".format(self._wavelength))
                 self._velocity_calculated = True
                 self._zfar = self._zclose + self._wavelength
+
                 self._wavelengthbound = self._zfar
                 return
         
@@ -57,63 +101,99 @@ class PyRfqUtils(object):
                 
                 bunchparticles_indices = self._beam.selectparticles(zl=self._zclose, zu=self._zfar)
 
-                bx = [] # x y z positions
-                by = []
-                bz = []
-                br = [] # r and theta
-                btheta = []
-                bvx = [] # velocities
-                bvy = []
-                bvz = []
-                bux = [] # momenta
-                buy = []
-                buz = []
-                bxp = [] # tranverse normalized velocities
-                byp = []
-                brp = []
-                bgaminv = [] # gamma inverse 
+                self._bunch_particles["x"] = self._beam.getx()[bunchparticles_indices]
+                self._bunch_particles["y"] = self._beam.gety()[bunchparticles_indices]
+                self._bunch_particles["z"] = self._beam.getz()[bunchparticles_indices]
+                self._bunch_particles["r"] = self._beam.getr()[bunchparticles_indices]
+                self._bunch_particles["theta"] = self._beam.gettheta()[bunchparticles_indices]
+                self._bunch_particles["vx"] = self._beam.getvx()[bunchparticles_indices]
+                self._bunch_particles["vy"] = self._beam.getvy()[bunchparticles_indices]
+                self._bunch_particles["vz"] = self._beam.getvz()[bunchparticles_indices]
+                self._bunch_particles["ux"] = self._beam.getux()[bunchparticles_indices]
+                self._bunch_particles["uy"] = self._beam.getuy()[bunchparticles_indices]
+                self._bunch_particles["uz"] = self._beam.getuz()[bunchparticles_indices]
+                self._bunch_particles["xp"] = self._beam.getxp()[bunchparticles_indices]
+                self._bunch_particles["yp"] = self._beam.getyp()[bunchparticles_indices]
+                self._bunch_particles["rp"] = self._beam.getrp()[bunchparticles_indices]
+                self._bunch_particles["gaminv"] = self._beam.getgaminv()[bunchparticles_indices]
 
-                tbx = self._beam.getx()
-                tby = self._beam.gety()
-                tbz = self._beam.getz()
-                tbr = self._beam.getr()
-                tbtheta = self._beam.gettheta()
-                tbvx = self._beam.getvx()
-                tbvy = self._beam.getvy()
-                tbvz = self._beam.getvz()
-                tbux = self._beam.getux()
-                tbuy = self._beam.getuy()
-                tbuz = self._beam.getuz()
-                tbxp = self._beam.getxp()
-                tbyp = self._beam.getyp()
-                tbrp = self._beam.getrp()
-                tbgaminv = self._beam.getgaminv()
-
-                for i in bunchparticles_indices:
-                    bx.append(tbx[i])
-                    by.append(tby[i])
-                    bz.append(tbz[i])
-                    br.append(tbr[i])
-                    btheta.append(tbtheta[i])
-                    bvx.append(tbvx[i])
-                    bvy.append(tbvy[i])
-                    bvz.append(tbz[i])
-                    bux.append(tbux[i]) 
-                    buy.append(tbuy[i])
-                    buz.append(tbuz[i])
-                    bxp.append(tbxp[i])
-                    byp.append(tbyp[i])
-                    brp.append(tbrp[i])
-                    bgaminv.append(tbgaminv[i])
+                bunch_particles = self._bunch_particles
 
 
-                self._bunch_particles = zip(bx, by, bz, br, btheta, bvx, bvy, bvz, bux, buy, buz, bxp, byp, brp, bgaminv)
-                
-                with open("bunchparticles.dump", 'w') as outfile:
-                    outfile.write("x, y, z, r, theta, vx, vy, vz, ux, uy, uz, xp, yp, rp, gaminv\n")
-                    for bx, by, bz, br, btheta, bvx, bvy, bvz, bux, buy, buz, bxp, byp, brp, bgaminv in self._bunch_particles:
-                        outfile.write("{:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}\n".format(bx, by, bz, br, btheta, bvx, bvy, bvz, bux, buy, buz, bxp, byp, brp, bgaminv))
+                i = 0
+                while os.path.exists("bunch_particles.%s.dump" % i):
+                    i += 1
 
-                exit(1)
+                pickle.dump(bunch_particles, open("bunch_particles.%s.dump" % i, "wb"))
+
+                print("Bunch found.")
+
+
+
+
+    def plotXZparticles(self, view=1):
+
+        plsys(view)
+
+        plg([w3d.xmmin,w3d.xmmax],[self._rfq._field._zmin, self._rfq._field._zmin], color=red)
+        plg([w3d.xmmin,w3d.xmmax],[self._rfq._field._zmax, self._rfq._field._zmax], color=red)
+
+        if (self._wavelengthbound):
+            plg([w3d.xmmin,w3d.xmmax],[self._wavelengthbound, self._wavelengthbound], color=red)   
+
+
+        self._rfq._conductors.draw()
+        # pfzx(plotsg=0, cond=0, titles=False, view=view)
+        ppzx(titles=False, view=view)
+        limits(w3d.zmminglobal, w3d.zmmaxglobal)
+        ptitles("", "Z (m)", "X (m)")
+
+    def plotYZparticles(self, view=1):
+        plsys(view)
+
+        plg([w3d.ymmin,w3d.ymmax],[self._rfq._field._zmin, self._rfq._field._zmin], color=red)
+        plg([w3d.ymmin,w3d.ymmax],[self._rfq._field._zmax, self._rfq._field._zmax], color=red)
+
+
+        if (self._wavelengthbound):
+            plg([w3d.ymmin,w3d.ymmax],[self._wavelengthbound, self._wavelengthbound], color=red)   
+
+        
+        self._rfq._conductors.draw()
+        # pfzy(plotsg=0, cond=0, titles=False, view=view)
+        ppzy(titles=False, view=view)
+        limits(w3d.zmminglobal, w3d.zmmaxglobal)
+        ptitles("", "Z (m)", "Y (m)")
+
+    def plotXphase(self, view=1):
+        plsys(view)
+        self._beam.ppxxp()
+
+    def plotYphase(self, view=1):
+        plsys(view)
+        self._beam.ppyyp()
+    
+    def beamplots(self):
+        window(0)
+        fma()
+        self.plotXZparticles()
+        refresh()
+
+        window(1)
+        fma()
+        self.plotYZparticles()
+        refresh()
+
+        window(2)
+        fma()
+        self.plotXphase()
+        refresh()
+
+        window(3)
+        fma()
+        self.plotYphase()
+        refresh()
 
     def make_plots(self):
+        if top.it%1 == 0:
+            self.beamplots()

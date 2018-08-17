@@ -5,17 +5,17 @@ from py_rfq_utils import *
 import time
 
 #FILENAME  = "input/vecc_rfq_004_py.dat"
-FILENAME  = "input/PARMTEQOUT.TXT"
+#FILENAME  = "input/PARMTEQOUT.TXT"
 #FILENAME  = "input/Parm_50_63cells.dat"
 #FILENAME  = "input/fieldoutput.txt"
-#FILENAME  = "input/fieldw015width.dat"
+FILENAME  = "input/fieldw015width.dat"
 
 VANE_RAD  = 2 * cm
 VANE_DIST = 11 * cm
 
-NX     = 16
-NY     = 16
-NZ     = 512
+NX     = 32
+NY     = 32
+NZ     = 1024
 PRWALL = 0.2
 D_T    = 1e-9
 RF_FREQ = 32.8e6
@@ -65,7 +65,7 @@ top.injctspc = 1000000
 ##########################################
 # RFQ creation and initialization of parameters
 
-rfq = PyRFQ(filename=FILENAME, from_cells=True, twoterm=True, boundarymethod=False)
+rfq = PyRFQ(filename=FILENAME, from_cells=False, twoterm=True, boundarymethod=False)
 rfq.vane_radius       = VANE_RAD
 rfq.vane_distance     = VANE_DIST
 rfq.zstart            = Z_START
@@ -112,9 +112,10 @@ rfq.install()
 
 
 
-childmesh = refinedsolver.addchild(mins=[rfq._field._xmin, rfq._field._ymin, SIM_START], 
-                             maxs=[rfq._field._xmax, rfq._field._ymax, w3d.zmmax],
-                             refinement=[2,2,2])
+# childmesh = refinedsolver.addchild(mins=[rfq._field._xmin, rfq._field._ymin, SIM_START], 
+#                              maxs=[rfq._field._xmax, rfq._field._ymax, w3d.zmmax],
+#                              refinement=[2,2,2])
+
 
 beam = Species(type=Dihydrogen, charge_state=+1, name="H2+")
 top.lrelativ = False
@@ -144,227 +145,23 @@ derivqty()
 package("w3d")
 generate()
 
-winon(1, suffix='YZ')
-winon(2, suffix="X'X")
-winon(3, suffix="Y'Y")
-winon()
-
-wavelengthbound = None
-
-
-def plotXZparticles(view=1):
-
-    plsys(view)
-
-    plg([-PRWALL,PRWALL],[rfq._field._zmin, rfq._field._zmin], color=red)
-    plg([-PRWALL,PRWALL],[rfq._field._zmax, rfq._field._zmax], color=red)
-
-    if (wavelengthbound):
-        plg([-PRWALL,PRWALL],[wavelengthbound, wavelengthbound], color=red)   
-
-
-    rfq._conductors.draw()
-    # pfzx(plotsg=0, cond=0, titles=False, view=view)
-    ppzx(titles=False, view=view)
-    limits(w3d.zmminglobal, w3d.zmmaxglobal)
-    ptitles("", "Z (m)", "X (m)")
-
-def plotYZparticles(view=1):
-    plsys(view)
-
-    plg([-PRWALL,PRWALL],[rfq._field._zmin, rfq._field._zmin], color=red)
-    plg([-PRWALL,PRWALL],[rfq._field._zmax, rfq._field._zmax], color=red)
-
-
-    if (wavelengthbound):
-        plg([-PRWALL,PRWALL],[wavelengthbound, wavelengthbound], color=red)   
-
-    
-    rfq._conductors.draw()
-    # pfzy(plotsg=0, cond=0, titles=False, view=view)
-    ppzy(titles=False, view=view)
-    limits(w3d.zmminglobal, w3d.zmmaxglobal)
-    ptitles("", "Z (m)", "Y (m)")
-
-def plotXphase(view=1):
-    plsys(view)
-    beam.ppxxp()
-
-def plotYphase(view=1):
-    plsys(view)
-    beam.ppyyp()
-
-def beamplots():
-    window(0)
-    fma()
-    plotXZparticles()
-    refresh()
-
-    window(1)
-    fma()
-    plotYZparticles()
-    refresh()
-
-    window(2)
-    fma()
-    plotXphase()
-    refresh()
-
-    window(3)
-    fma()
-    plotYphase()
-    refresh()
-
-
-
-velocity_calculated = False
-zclose = rfq._field._zmax
-zfar = zclose + 0.01
-
-velocityarray = []
-average_velocity = 0.0
-wavelength = 0.0
-
-bunch_particles = []
-
-bunchfound = False
-        
-
-@callfromafterstep
-def makeplots():
-    if top.it%1 == 0:
-        beamplots()
-        # window(0)
-        # rfq.plot_efield()
-        # refresh()
-
 utils = PyRfqUtils(rfq, beam)
 
 @callfromafterstep
 def callutils():
     global utils
-    utils.find_bunch()
-
-
-
-# @callfromafterstep
-# def find_bunch():
-#     global bunchfound
-#     global velocity_calculated
-#     global zfar
-#     global velocityarray
-#     global wavelengthbound
-#     global bunch_particles
-
-#     if bunchfound:
-#         return
-
-#     if not velocity_calculated:
-#         crossedZ = beam.selectparticles(zc=zclose)
-#         velocities = beam.getvz()
-#         particle_velocities = [velocities[i] for i in crossedZ]
-#         velocityarray = velocityarray + particle_velocities
-#         print("length: {}".format(len(velocityarray)))
-
-#         if (len(velocityarray) > 10000):
-#             print("found a velocity!!!!!!!!!")
-#             average_velocity = np.mean(velocityarray)
-#             velocity_calculated = True
-#             wavelength = average_velocity / rfq.rf_freq
-#             print("wavelength:  {}".format(wavelength))
-#             velocity_calculated = True
-#             zfar = zclose + wavelength
-#             wavelengthbound = zfar
-#             return
-    
-#     if velocity_calculated:
-
-#         tot_particles = list(zip(beam.getx(), beam.gety(), beam.getz()))
-#         #tot_particles = np.array(tot_particles)
-        
-#         print("zclose: {}  zfar: {}".format(zclose, zfar))
-#         particles = [item for item in tot_particles if (zclose < item[2] < zfar)]
-#         z_positions = [item[2] for item in particles]
-#         print("Result: {},  Desired: {}".format(np.mean(z_positions), (zfar + zclose) / 2))
-#         print("RestulR: {},  Desired:  {}".format(np.around(np.mean(z_positions), decimals=2), np.around((zfar + zclose) / 2, decimals=2)))
-
-#         if (np.around(np.mean(z_positions), decimals=2) == (np.around(((zfar - zclose) / 2) + zclose, decimals=2))):
-#             print("==========================\nFound a bunch!\n=================================")
-#             bunchfound = True
-            
-#             bunchparticles_indices = beam.selectparticles(zl=zclose, zu=zfar)
-
-#             bx = [] # x y z positions
-#             by = []
-#             bz = []
-#             br = [] # r and theta
-#             btheta = []
-#             bvx = [] # velocities
-#             bvy = []
-#             bvz = []
-#             bux = [] # momenta
-#             buy = []
-#             buz = []
-#             bxp = [] # tranverse normalized velocities
-#             byp = []
-#             brp = []
-#             bgaminv = [] # gamma inverse 
-
-#             tbx = beam.getx()
-#             tby = beam.gety()
-#             tbz = beam.getz()
-#             tbr = beam.getr()
-#             tbtheta = beam.gettheta()
-#             tbvx = beam.getvx()
-#             tbvy = beam.getvy()
-#             tbvz = beam.getvz()
-#             tbux = beam.getux()
-#             tbuy = beam.getuy()
-#             tbuz = beam.getuz()
-#             tbxp = beam.getxp()
-#             tbyp = beam.getyp()
-#             tbrp = beam.getrp()
-#             tbgaminv = beam.getgaminv()
-
-#             for i in bunchparticles_indices:
-#                 bx.append(tbx[i])
-#                 by.append(tby[i])
-#                 bz.append(tbz[i])
-#                 br.append(tbr[i])
-#                 btheta.append(tbtheta[i])
-#                 bvx.append(tbvx[i])
-#                 bvy.append(tbvy[i])
-#                 bvz.append(tbz[i])
-#                 bux.append(tbux[i]) 
-#                 buy.append(tbuy[i])
-#                 buz.append(tbuz[i])
-#                 bxp.append(tbxp[i])
-#                 byp.append(tbyp[i])
-#                 brp.append(tbrp[i])
-#                 bgaminv.append(tbgaminv[i])
-
-
-#             bunch_particles = zip(bx, by, bz, br, btheta, bvx, bvy, bvz, bux, buy, buz, bxp, byp, brp, bgaminv)
-            
-#             with open("bunchparticles.dump", 'w') as outfile:
-#                 outfile.write("x, y, z, r, theta, vx, vy, vz, ux, uy, uz, xp, yp, rp, gaminv\n")
-#                 for bx, by, bz, br, btheta, bvx, bvy, bvz, bux, buy, buz, bxp, byp, brp, bgaminv in bunch_particles:
-#                     outfile.write("{:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}   {:.4e}\n".format(bx, by, bz, br, btheta, bvx, bvy, bvz, bux, buy, buz, bxp, byp, brp, bgaminv))
-
-
+    utils.make_plots()
 
 starttime = time.time()
 
-step(10000)
+step(1077)
 hcp()
 
 endtime = time.time()
 
 print("Elapsed time for simulation: {} seconds".format(endtime-starttime))
 
-
-
-
+bunch = utils.find_bunch(max_steps=1000)
 
 
 part_x = beam.getx()
@@ -381,6 +178,7 @@ with open("particle.%s.dump" % i, 'w') as outfile:
     outfile.write("x, y, z\n")
     for x, y, z in zip(part_x, part_y, part_z):
         outfile.write("{:.4e}   {:.4e}   {:.4e}\n".format(x, y, z))
+
 
 
 

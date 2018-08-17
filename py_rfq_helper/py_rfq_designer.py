@@ -180,7 +180,6 @@ class FieldGenerator(object):
         data = tuple([cell_type, flip_z, shift_cell_no, cell_no, 0.0, 0.0,
                       aperture, modulation, 0.0, length, cumulative_length])
 
-        print(data)
         self._parameters = np.append(self._parameters, [np.array(data, dtype=self._cell_dtype)], axis=0)
 
         return 0
@@ -271,8 +270,6 @@ class FieldGenerator(object):
                 else:
                     cell_type = "NCS"
 
-                print("Cell no:  {}   Cell type:   {}".format(cell_no, cell_type))
-
                 self.add_cell(cell_type=cell_type,
                               aperture=params[6] * 0.01,
                               modulation=params[7],
@@ -326,8 +323,6 @@ class FieldGenerator(object):
 
         m = cell_parameters["modulation"]
         a = cell_parameters["aperture"]
-
-        print("parameters len: {}".format(len(self._parameters)))
 
         if 0 < cell_number:
             ma_fudge_begin = 0.5 * (1.0 + self._parameters["aperture"][cell_number - 1] *
@@ -780,8 +775,6 @@ class FieldGenerator(object):
         # b_match = self._parameters[self._nrms + 1]["focusing factor"]
         rms_length = self._parameters[self._nrms - 1]["cumulative length"]
 
-        print(rms_length)
-
         rms_idx = np.where(self._mesh_z <= rms_length)
 
         print("Calculating Radial Matching Section from z = {} m to {} m".format(0.0, rms_length))
@@ -867,7 +860,6 @@ class FieldGenerator(object):
             #self.calculate_rms_in()
         # Loop over all remaining cells starting after RMS
         for cn, cell_parameters in enumerate(self._parameters[self._nrms:]):
-
             cn += self._nrms
             # Calculate the potential and field according to cell type
             if cell_parameters["cell type"] == "NCS":
@@ -966,8 +958,6 @@ class FieldGenerator(object):
         # Find nearest mesh value to desired x
         xvals = self._mesh_x.flatten()
         x_close = xvals[np.abs(xvals - x).argmin()]
-
-        print(x_close)
 
         plot_idx = np.where((self._mesh_x == x_close) & (self._mesh_y == 0.0))
 
@@ -3658,7 +3648,6 @@ class PyRFQ(object):
 
         def fieldscaling(time):
             val = np.cos(time * 2 * np.pi * self.rf_freq)
-            print(time, val)
             self._ray.append(val)
             return val
 
