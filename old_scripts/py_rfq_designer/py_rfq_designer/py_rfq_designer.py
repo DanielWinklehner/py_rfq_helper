@@ -13,10 +13,12 @@ from scipy.optimize import root
 # import gc
 import datetime
 import time
+import copy
+import os
+import shutil
 
 # Check if we can connect to a display, if not disable all plotting and windowed stuff (like gmsh)
 # TODO: This does not remotely cover all cases!
-import os
 if "DISPLAY" in os.environ.keys():
     x11disp = True
 else:
@@ -37,17 +39,33 @@ except ImportError:
     MPI = None
     exit()
 
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-size = comm.Get_size()
-host = MPI.Get_processor_name()
+HAVE_OCC = False
+try:
+    from OCC.Extend.DataExchange import read_stl_file
+    from OCC.Display.SimpleGui import init_display
+    from OCC.Core.BRepPrimAPI import BRepPrimAPI_MakeBox, BRepPrimAPI_MakeTorus
+    from OCC.Core.BRepTools import breptools_Write
+    from OCC.Core.BRepBndLib import brepbndlib_Add
+    from OCC.Core.Bnd import Bnd_Box
 
-print("Process {} of {} on host {} started!".format(rank, size, host))
+    HAVE_OCC = True
+except ImportError:
+    print("Something went wrong during OCC import. No CAD support possible!")
+
+COMM = MPI.COMM_WORLD
+RANK = COMM.Get_rank()
+SIZE = COMM.Get_size()
+HOST = MPI.Get_processor_name()
+GMSH_EXE = "E:\gmsh\gmsh.exe"
+
+HAVE_TEMP_FOLDER = False
+
+print("Process {} of {} on host {} started!".format(RANK, SIZE, HOST))
 
 np.set_printoptions(threshold=10000)
 
-# For now, everything involving the pymodules with be done on master proc (rank 0)
-if rank == 0:
+# For now, everything involving the pymodules with be done on master proc (RANK 0)
+if RANK == 0:
     from dans_pymodules import *
 
     colors = MyColors()
@@ -83,8 +101,6 @@ def stopwatch(msg=''):
         return
     print("%s: %.2f ms" % (msg, 1000.0 * (tm - _tm)))
     _tm = tm
-
-
 # ------------------------------------------------------------------------- #
 
 
@@ -397,13 +413,15 @@ class PyRFQCell(object):
 
 class PyRFQVane(object):
     def __init__(self,
+                 parent_rfq,
                  vane_type,
                  cells,
                  voltage,
+                 occ_tolerance=1e-5,
                  debug=False):
 
         self._debug = debug
-
+        self._parent_rfq = parent_rfq
         self._type = vane_type
         self._cells = cells
         self._voltage = voltage
@@ -421,6 +439,11 @@ class PyRFQVane(object):
                              "mirror": False,
                              "domain_idx": None,
                              "gmsh_str": None}
+
+        self._occ_params = {"tolerance": occ_tolerance,
+                            "solid": None,  # The OCC solid body,
+                            "bbox": None,  # The bounding box ofthe OCC solid body
+                            }
 
         self._mesh = None
 
@@ -443,6 +466,10 @@ class PyRFQVane(object):
     @property
     def vane_type(self):
         return self._type
+
+    def set_vane_type(self, vane_type=None):
+        if vane_type is not None:
+            self._type = vane_type
 
     @property
     def vertices_elements(self):
@@ -752,162 +779,196 @@ EndFor
 
             # TODO: still need to mirror this on x=y plane for second vane!
 
-        with open("test_{}.geo".format(self._type), "w") as _of:
-            _of.write(gmsh_str)
-
         self._mesh_params["gmsh_str"] = gmsh_str
 
         return gmsh_str
 
-    def calculate_mesh(self, dx=None):
+    def generate_occ(self):
 
-        if dx is not None:
-            self._mesh_params["dx"] = dx
-        else:
-            dx = self._mesh_params["dx"]
+        tmp_dir = self._parent_rfq.temp_dir
 
-        zmin = 0.0  # For now, RFQ vanes always start at 0.0, everything is relative
-        zmax = self._length
-        numz = np.round((zmax - zmin) / dx, 0) + 1
+        if HAVE_OCC and tmp_dir is not None:
 
-        r_tip = self._mesh_params["r_tip"]
-        h_block = self._mesh_params["h_block"]
+            geo_fn = os.path.join(tmp_dir, "test_{}.geo".format(self.vane_type))
+            msh_fn = os.path.splitext(geo_fn)[0] + ".msh"
+            stl_fn = os.path.splitext(geo_fn)[0] + ".stl"
 
-        # Calculate z_data and vane profile:
-        z, vane = self.get_profile(nz=numz)
+            with open(geo_fn, "w") as _of:
+                _of.write(self._mesh_params["gmsh_str"])
 
-        if self._mesh_params["tip"] == "semi-circle":
-            # Calculate approximate angular resolution corresponding to desired mesh size
-            num_phi = np.round(r_tip * np.pi / dx, 0)
-            phi = np.pi / num_phi
+            # TODO: Could we use higher order (i.e. curved) meshes? -DW
+            command = "{} \"{}\" -2 -order 1 -o \"{}\"".format(GMSH_EXE, geo_fn, msh_fn)
+            if self._debug:
+                print("Running", command)
+            gmsh_success = os.system(command)
 
-            print("With mesh_size {} m, we have {} points per semi-circle".format(dx, num_phi))
+            command = "{} \"{}\" -0 -o \"{}\" -format stl".format(GMSH_EXE, msh_fn, stl_fn)
+            if self._debug:
+                print("Running", command)
+            gmsh_success += os.system(command)
 
-            # We need two sets of phi values so that subsequent z positions form triangles rather than squares
-            phi_set = [np.linspace(np.pi, 2.0 * np.pi, num_phi),
-                       np.linspace(np.pi + 0.5 * phi, 2.0 * np.pi - 0.5 * phi, num_phi - 1)]
+            if gmsh_success != 0:  # or not os.path.isfile("shape.stl"):
+                print("Something went wrong with gmsh, be sure you defined "
+                      "the correct path at the beginning of the file!")
+                return 1
 
-            # maximum vertical extent:
-            ymax = r_tip + np.max(vane) + h_block
-            print("Maximum vertical extent: {} m".format(ymax))
-            # TODO: Think about whether it's a good idea to use only half the mesh size on block part
-            num_vert_pts = int(np.round((ymax - r_tip - np.min(vane)) / 2.0 / dx, 0))
-            print("Number of points in vertical direction: {}".format(num_vert_pts))
-            num_horz_pts = int(np.round(2.0 * r_tip / 2.0 / dx, 0)) - 1  # Not counting corners
-            horz_step_size = (2.0 * r_tip) / (num_horz_pts + 1)
+            # Create the OCC solid + bbox and save in vane
+            self._occ_params["solid"] = read_stl_file(stl_fn)
+            self._occ_params["bbox"] = Bnd_Box()
+            self._occ_params["bbox"].SetGap(self._occ_params["tolerance"])
+            brepbndlib_Add(self._occ_params["solid"], self._occ_params["bbox"])
 
-            # Create point cloud for testing
-            points = []
-            for i, _z in enumerate(z):
-
-                # Create curved surface points:
-                for _phi in phi_set[int(i % 2.0)]:
-                    points.append((r_tip * np.cos(_phi),
-                                   r_tip * np.sin(_phi) + r_tip + vane[i],
-                                   _z))
-
-                # Create straight lines points:
-                # Looking with z, we start at the right end of the curvature and go up-left-down
-                vert_step = (ymax - r_tip - vane[i]) / num_vert_pts
-
-                # If we are in phi_set 0, we start one step up, in phi set 1 a half step up
-                for j in range(num_vert_pts):
-                    points.append((r_tip, points[-1][1] + vert_step, _z))
-
-                if i % 2.0 == 0.0:
-                    points.pop(-1)
-
-                # Append the corner point
-                points.append((r_tip, ymax, _z))
-
-                if i % 2.0 == 0.0:
-                    for j in range(num_horz_pts + 1):
-                        points.append((r_tip + 0.5 * horz_step_size - (j + 1) * horz_step_size, ymax, _z))
-                else:
-                    for j in range(num_horz_pts):
-                        points.append((r_tip - (j + 1) * horz_step_size, ymax, _z))
-
-                # Append the corner point
-                points.append((-r_tip, ymax, _z))
-
-                # Finish up by going down on the left side
-                for j in range(num_vert_pts):
-                    points.append((-r_tip, ymax - (j + 1) * vert_step + 0.5 * (i % 2.0) * vert_step, _z))
-
-                if i % 2.0 == 0.0:
-                    points.pop(-1)
-
-            points = np.array(points, dtype=[("x", float), ("y", float), ("z", float)])
-
-            # Apply rotation
-            rot = rot_map[self._type]
-
-            if rot != 0.0:
-                angle = rot * np.pi / 180.0
-
-                x_old = points["x"].copy()
-                y_old = points["y"].copy()
-
-                points["x"] = x_old * np.cos(angle) - y_old * np.sin(angle)
-                points["y"] = x_old * np.sin(angle) + y_old * np.cos(angle)
-
-                del x_old
-                del y_old
-
-            points_per_slice = len(np.where(points["z"] == z[0])[0])
-            print("Points per slice = {}".format(points_per_slice))
-
-            # For each point, there need to be lines created to neighbors
-            elements = []
-            for i, point in enumerate(points[:-points_per_slice]):
-                # Each element contains the indices of the bounding vertices
-                slice_no = int(i / points_per_slice)
-                # print(i, slice_no, int(slice_no % 2))
-
-                if slice_no % 2 == 0.0:
-
-                    if (i + 1) % points_per_slice != 0.0:
-                        elements.append([i, i + 1, i + points_per_slice])
-                    else:
-                        elements.append(
-                            [i, i + points_per_slice, i + 1 - points_per_slice])
-
-                    if i % points_per_slice != 0.0:
-                        elements.append(
-                            [i, i + points_per_slice - 1, i + points_per_slice])
-                    else:
-                        elements.append(
-                            [i, i + points_per_slice, i + 2 * points_per_slice - 1])
-
-                else:
-
-                    if (i + 1) % points_per_slice != 0.0:
-                        # Regular element
-                        elements.append([i, i + 1, i + points_per_slice + 1])
-                        elements.append([i, i + points_per_slice, i + points_per_slice + 1])
-                    else:
-                        # Last element of level
-                        elements.append([i, i + 1 - points_per_slice, i + 1])
-                        elements.append([i, i + 1, i + points_per_slice])
-
-            vertices = np.array([points["x"], points["y"], points["z"]])
-            elements = np.array(elements).T
-
-            # Test bempp calculation for single vane
-            if bempp is not None:
-                # noinspection PyUnresolvedReferences
-                self._mesh = bempp.api.grid.grid_from_element_data(vertices, elements)
-
-                # if self._debug:
-                #     self._mesh.plot()
-
-            else:
-                return 0
-
-        else:
-            print("The vane type '{}' is not (yet) implemented. Aborting.".format(self._mesh_params["tip"]))
-            return 1
         return 0
+
+    # def calculate_mesh(self, dx=None):
+    #
+    #     if dx is not None:
+    #         self._mesh_params["dx"] = dx
+    #     else:
+    #         dx = self._mesh_params["dx"]
+    #
+    #     zmin = 0.0  # For now, RFQ vanes always start at 0.0, everything is relative
+    #     zmax = self._length
+    #     numz = np.round((zmax - zmin) / dx, 0) + 1
+    #
+    #     r_tip = self._mesh_params["r_tip"]
+    #     h_block = self._mesh_params["h_block"]
+    #
+    #     # Calculate z_data and vane profile:
+    #     z, vane = self.get_profile(nz=numz)
+    #
+    #     if self._mesh_params["tip"] == "semi-circle":
+    #         # Calculate approximate angular resolution corresponding to desired mesh size
+    #         num_phi = np.round(r_tip * np.pi / dx, 0)
+    #         phi = np.pi / num_phi
+    #
+    #         print("With mesh_size {} m, we have {} points per semi-circle".format(dx, num_phi))
+    #
+    #         # We need two sets of phi values so that subsequent z positions form triangles rather than squares
+    #         phi_set = [np.linspace(np.pi, 2.0 * np.pi, num_phi),
+    #                    np.linspace(np.pi + 0.5 * phi, 2.0 * np.pi - 0.5 * phi, num_phi - 1)]
+    #
+    #         # maximum vertical extent:
+    #         ymax = r_tip + np.max(vane) + h_block
+    #         print("Maximum vertical extent: {} m".format(ymax))
+    #         # TODO: Think about whether it's a good idea to use only half the mesh size on block part
+    #         num_vert_pts = int(np.round((ymax - r_tip - np.min(vane)) / 2.0 / dx, 0))
+    #         print("Number of points in vertical direction: {}".format(num_vert_pts))
+    #         num_horz_pts = int(np.round(2.0 * r_tip / 2.0 / dx, 0)) - 1  # Not counting corners
+    #         horz_step_size = (2.0 * r_tip) / (num_horz_pts + 1)
+    #
+    #         # Create point cloud for testing
+    #         points = []
+    #         for i, _z in enumerate(z):
+    #
+    #             # Create curved surface points:
+    #             for _phi in phi_set[int(i % 2.0)]:
+    #                 points.append((r_tip * np.cos(_phi),
+    #                                r_tip * np.sin(_phi) + r_tip + vane[i],
+    #                                _z))
+    #
+    #             # Create straight lines points:
+    #             # Looking with z, we start at the right end of the curvature and go up-left-down
+    #             vert_step = (ymax - r_tip - vane[i]) / num_vert_pts
+    #
+    #             # If we are in phi_set 0, we start one step up, in phi set 1 a half step up
+    #             for j in range(num_vert_pts):
+    #                 points.append((r_tip, points[-1][1] + vert_step, _z))
+    #
+    #             if i % 2.0 == 0.0:
+    #                 points.pop(-1)
+    #
+    #             # Append the corner point
+    #             points.append((r_tip, ymax, _z))
+    #
+    #             if i % 2.0 == 0.0:
+    #                 for j in range(num_horz_pts + 1):
+    #                     points.append((r_tip + 0.5 * horz_step_size - (j + 1) * horz_step_size, ymax, _z))
+    #             else:
+    #                 for j in range(num_horz_pts):
+    #                     points.append((r_tip - (j + 1) * horz_step_size, ymax, _z))
+    #
+    #             # Append the corner point
+    #             points.append((-r_tip, ymax, _z))
+    #
+    #             # Finish up by going down on the left side
+    #             for j in range(num_vert_pts):
+    #                 points.append((-r_tip, ymax - (j + 1) * vert_step + 0.5 * (i % 2.0) * vert_step, _z))
+    #
+    #             if i % 2.0 == 0.0:
+    #                 points.pop(-1)
+    #
+    #         points = np.array(points, dtype=[("x", float), ("y", float), ("z", float)])
+    #
+    #         # Apply rotation
+    #         rot = rot_map[self._type]
+    #
+    #         if rot != 0.0:
+    #             angle = rot * np.pi / 180.0
+    #
+    #             x_old = points["x"].copy()
+    #             y_old = points["y"].copy()
+    #
+    #             points["x"] = x_old * np.cos(angle) - y_old * np.sin(angle)
+    #             points["y"] = x_old * np.sin(angle) + y_old * np.cos(angle)
+    #
+    #             del x_old
+    #             del y_old
+    #
+    #         points_per_slice = len(np.where(points["z"] == z[0])[0])
+    #         print("Points per slice = {}".format(points_per_slice))
+    #
+    #         # For each point, there need to be lines created to neighbors
+    #         elements = []
+    #         for i, point in enumerate(points[:-points_per_slice]):
+    #             # Each element contains the indices of the bounding vertices
+    #             slice_no = int(i / points_per_slice)
+    #             # print(i, slice_no, int(slice_no % 2))
+    #
+    #             if slice_no % 2 == 0.0:
+    #
+    #                 if (i + 1) % points_per_slice != 0.0:
+    #                     elements.append([i, i + 1, i + points_per_slice])
+    #                 else:
+    #                     elements.append(
+    #                         [i, i + points_per_slice, i + 1 - points_per_slice])
+    #
+    #                 if i % points_per_slice != 0.0:
+    #                     elements.append(
+    #                         [i, i + points_per_slice - 1, i + points_per_slice])
+    #                 else:
+    #                     elements.append(
+    #                         [i, i + points_per_slice, i + 2 * points_per_slice - 1])
+    #
+    #             else:
+    #
+    #                 if (i + 1) % points_per_slice != 0.0:
+    #                     # Regular element
+    #                     elements.append([i, i + 1, i + points_per_slice + 1])
+    #                     elements.append([i, i + points_per_slice, i + points_per_slice + 1])
+    #                 else:
+    #                     # Last element of level
+    #                     elements.append([i, i + 1 - points_per_slice, i + 1])
+    #                     elements.append([i, i + 1, i + points_per_slice])
+    #
+    #         vertices = np.array([points["x"], points["y"], points["z"]])
+    #         elements = np.array(elements).T
+    #
+    #         # Test bempp calculation for single vane
+    #         if bempp is not None:
+    #             # noinspection PyUnresolvedReferences
+    #             self._mesh = bempp.api.grid.grid_from_element_data(vertices, elements)
+    #
+    #             # if self._debug:
+    #             #     self._mesh.plot()
+    #
+    #         else:
+    #             return 0
+    #
+    #     else:
+    #         print("The vane type '{}' is not (yet) implemented. Aborting.".format(self._mesh_params["tip"]))
+    #         return 1
+    #     return 0
 
     def calculate_profile(self, fudge=None):
 
@@ -949,20 +1010,20 @@ EndFor
 
         return z, vane
 
-    def plot_mesh(self):
-
-        if bempp is None or self._mesh is None:
-            print("Either BEMPP couldn't be loaded or there is not yet a mesh generated!")
-            return 1
-
-        self._mesh.plot()
-
-        return 0
+    # def plot_mesh(self):
+    #
+    #     if bempp is None or self._mesh is None:
+    #         print("Either BEMPP couldn't be loaded or there is not yet a mesh generated!")
+    #         return 1
+    #
+    #     self._mesh.plot()
+    #
+    #     return 0
 
 
 # noinspection PyUnresolvedReferences
 class PyRFQ(object):
-    def __init__(self, voltage, debug=False):
+    def __init__(self, voltage, occ_tolerance=1e-5, debug=False):
 
         self._debug = debug
         self._voltage = voltage
@@ -971,6 +1032,8 @@ class PyRFQ(object):
         self._cell_nos = []
         self._length = 0.0
         self._full_mesh = None
+        self._occ_tolerance = occ_tolerance  # Tolerace for bounding box and intersection tests in pythonocc-core
+        self._temp_dir = None
 
         self._variables_bempp = {"solution": None,
                                  "f_space": None,
@@ -994,6 +1057,33 @@ class PyRFQ(object):
                                     "vane_height_type": 'absolute',
                                     "nz": 500
                                     }
+
+        self.create_temp_dir()
+
+    @property
+    def temp_dir(self):
+        return self._temp_dir
+
+    def create_temp_dir(self):
+
+        tmp_path = os.path.join(os.getcwd(), "temp")
+
+        if not os.path.exists(tmp_path):
+            os.mkdir(tmp_path)
+        else:
+            shutil.rmtree(tmp_path)
+            os.mkdir(tmp_path)
+
+        if os.path.exists(tmp_path):
+            global HAVE_TEMP_FOLDER
+            HAVE_TEMP_FOLDER = True
+        else:
+            print("Could not create temp folder. Aborting.")
+            exit(1)
+
+        self._temp_dir = tmp_path
+
+        return tmp_path
 
     def __str__(self):
         text = "\nPyRFQ object with {} cells and length {:.4f} m. Vane voltage = {} V\n".format(self._cell_nos[-1],
@@ -1072,20 +1162,20 @@ class PyRFQ(object):
         """
 
         if filename is None:
-            if rank == 0:
-                # print("Process {} getting filename from dialog".format(rank))
+            if RANK == 0:
+                # print("Process {} getting filename from dialog".format(RANK))
                 # from dans_pymodules import FileDialog
                 fd = FileDialog()
                 filename = fd.get_filename('open')
                 data = {"fn": filename}
-                # req = comm.isend({'fn':filename}, dest=1, tag=11)
+                # req = COMM.isend({'fn':filename}, dest=1, tag=11)
                 # req.wait()
             else:
-                # req = comm.irecv(source=0, tag=11)
+                # req = COMM.irecv(source=0, tag=11)
                 data = None
-                # print("Process {} received filename {}.".format(rank, data["fn"]))
+                # print("Process {} received filename {}.".format(RANK, data["fn"]))
 
-            data = comm.bcast(data, root=0)
+            data = COMM.bcast(data, root=0)
             filename = data["fn"]
 
         if filename is None:
@@ -1218,7 +1308,7 @@ class PyRFQ(object):
         ex, ey, ez = np.gradient(self._variables_bempp["ef_phi"],
                                  _d[X], _d[Y], _d[Z])
 
-        if rank == 0:
+        if RANK == 0:
 
             _field = Field("RFQ E-Field",
                            dim=3,
@@ -1234,7 +1324,7 @@ class PyRFQ(object):
         else:
             mpi_data = None
 
-        mpi_data = comm.bcast(mpi_data, root=0)
+        mpi_data = COMM.bcast(mpi_data, root=0)
 
         self._variables_bempp["ef_itp"] = mpi_data["efield"]
 
@@ -1323,7 +1413,7 @@ class PyRFQ(object):
             for i, dirs in enumerate(["x", "y", "z"]):
                 print("{}: Indices {} to {}".format(dirs, start_idxs[i], end_idxs[i] - 1))
 
-        # Iterate over all the dimensions, calculate the subset of e-field
+        # Iterate over all the dimensions, calculate the subset of potential
         domain_idx = 1
         for x1, x2 in zip(start_idxs[X], end_idxs[X]):
             for y1, y2 in zip(start_idxs[Y], end_idxs[Y]):
@@ -1349,7 +1439,7 @@ class PyRFQ(object):
                     del sl_pot
                     del _pot
 
-        self._variables_bempp["ef_phi"] = pot -  3.0 * self._voltage
+        self._variables_bempp["ef_phi"] = pot - self._variables_bempp["pot_shift"]
 
         return 0
 
@@ -1421,7 +1511,7 @@ class PyRFQ(object):
         domains = np.zeros([0], int)
 
         # For now, do this only on the first node
-        if rank == 0:
+        if RANK == 0:
 
             for _vane in self._vanes:
                 # noinspection PyCallingNonCallable
@@ -1559,14 +1649,14 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
 
             mpi_data = None
 
-        mpi_data = comm.bcast(mpi_data, root=0)
+        mpi_data = COMM.bcast(mpi_data, root=0)
 
         self._full_mesh = bempp.api.grid.grid_from_element_data(mpi_data["vert"],
                                                                 mpi_data["elem"],
                                                                 mpi_data["doma"])
 
         if self._debug:
-            if rank == 0:
+            if RANK == 0:
                 self._full_mesh.plot()
 
         return 0
@@ -1592,7 +1682,7 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
         dirichlet_fun = bempp.api.GridFunction(dp0_space, fun=f)
 
         if self._debug:
-            if rank == 0:
+            if RANK == 0:
                 dirichlet_fun.plot()
                 bempp.api.export(grid_function=dirichlet_fun, file_name="dirichlet_func.msh")
 
@@ -1658,33 +1748,49 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
 
         # There are four vanes (rods) in the RFQ
         # x = horizontal, y = vertical, with p, m denoting positive and negative axis directions
-        # for vane_type in ["yp", "ym"]:
-        for vane_type in ["yp"]:
-            self._vanes.append(PyRFQVane(vane_type=vane_type,
-                                         cells=self._cells,
-                                         voltage=self._voltage + self._variables_bempp["pot_shift"],
-                                         debug=self._debug))
 
-        # for vane_type in ["xp", "xm"]:
-        for vane_type in ["xp"]:
-            self._vanes.append(PyRFQVane(vane_type=vane_type,
-                                         cells=self._cells,
-                                         voltage=-self._voltage + self._variables_bempp["pot_shift"],
-                                         debug=self._debug))
+        self._vanes.append(PyRFQVane(parent_rfq=self,
+                                     vane_type="yp",
+                                     cells=self._cells,
+                                     voltage=self._voltage + self._variables_bempp["pot_shift"],
+                                     debug=self._debug,
+                                     occ_tolerance=self._occ_tolerance))
 
+        self._vanes.append(PyRFQVane(self,
+                                     vane_type="xp",
+                                     cells=self._cells,
+                                     voltage=-self._voltage + self._variables_bempp["pot_shift"],
+                                     debug=self._debug,
+                                     occ_tolerance=self._occ_tolerance))
+
+        # TODO: Avoid multiproc in lieu of MPI?
         # Generate the two vanes in parallel:
-        p = Pool()
-        self._vanes = p.map(self.generate_vanes_worker, self._vanes)
+        p = Pool(2)
+        self._vanes = p.map(self.generate_vanes_worker_1, self._vanes)
+
+        # Now make copies, set vane_type again and recalculate gmsh_str
+        dx_h = self._variables_bempp["grid_res"]
+
+        for i, vane_type in enumerate(["ym", "xm"]):
+            new_vane = copy.deepcopy(self._vanes[i])  # First one is y direction
+            new_vane.set_vane_type(vane_type)
+            new_vane.generate_gmsh_str(dx=dx_h, h=dx_h,
+                                       symmetry=False, mirror=False)
+            self._vanes.append(new_vane)
+
+        # TODO: multiprocessing doesn't support occ objects, so need to figure out how to MPI this.
+        for _vane in self._vanes:
+            _vane.generate_occ()
 
         return 0
 
-    def generate_vanes_worker(self, vane):
+    def generate_vanes_worker_1(self, vane):
 
-        dx_h = self._variables_bempp["grid_res"]  # TODO: Is there a reason to set them to different values?
+        dx_h = self._variables_bempp["grid_res"]
 
         vane.calculate_profile(fudge=True)
-        vane.generate_gmsh_str(dx=dx_h, h=dx_h,
-                               symmetry=False, mirror=True)
+        vane.generate_gmsh_str(dx=dx_h, h=dx_h,  # TODO: Is there a reason to set them to different values?
+                               symmetry=False, mirror=False)
 
         return vane
 
@@ -2105,7 +2211,7 @@ if __name__ == "__main__":
     myrfq.set_bempp_parameter("add_endplates", True)
     myrfq.set_bempp_parameter("cyl_id", 0.1)
     myrfq.set_bempp_parameter("grid_res", 0.005)
-    myrfq.set_bempp_parameter("pot_shift", 3.0 * 22000.0)
+    # myrfq.set_bempp_parameter("pot_shift", 3.0 * 22000.0)
 
     print(myrfq)
 
@@ -2114,14 +2220,15 @@ if __name__ == "__main__":
     myrfq.generate_vanes()
     print("Generating vanes took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
-    if rank == 0:
+    exit()
+
+    if RANK == 0:
         myrfq.plot_vane_profile()
         myrfq.write_inventor_macro(vane_type='vane',
                                    vane_radius=0.0093,
                                    vane_height=0.03,
                                    vane_height_type='absolute',
                                    nz=600)
-    exit()
 
     print("Generating full mesh for BEMPP")
     ts = time.time()
@@ -2166,7 +2273,7 @@ if __name__ == "__main__":
     #
     # exit()
     #
-    # if rank == 0:
+    # if RANK == 0:
     #     myrfq.plot_combo(xypos=0.005, xyscale=1.0, zlim=(-0.1, 1.35))
     #
     # import pickle
