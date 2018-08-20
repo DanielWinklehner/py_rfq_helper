@@ -197,3 +197,23 @@ class PyRfqUtils(object):
     def make_plots(self):
         if top.it%1 == 0:
             self.beamplots()
+
+    def plot_rms_graph(self, start, end, bucketsize=0.002):
+        
+        beam = self._beam
+
+        x = beam.getx()
+        y = beam.gety()
+        z = beam.getz()
+
+        def rms(ray):
+            temp = np.array(ray)
+            temp = temp ** 2
+            avg = temp.mean()
+            avg = np.sqrt(avg)
+            return avg
+
+        bins = np.linspace(start, end, bucketsize)
+        xdigitized = np.digitize(x, bins)
+        ydigitized = np.digitize(y, bins)
+

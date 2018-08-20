@@ -5,19 +5,19 @@ from py_rfq_utils import *
 import time
 
 #FILENAME  = "input/vecc_rfq_004_py.dat"
-#FILENAME  = "input/PARMTEQOUT.TXT"
+FILENAME  = "input/PARMTEQOUT.TXT"
 #FILENAME  = "input/Parm_50_63cells.dat"
 #FILENAME  = "input/fieldoutput.txt"
-FILENAME  = "input/fieldw015width.dat"
+#FILENAME  = "input/fieldw015width.dat"
 
 VANE_RAD  = 2 * cm
 VANE_DIST = 11 * cm
 
-NX     = 32
-NY     = 32
-NZ     = 1024
+NX     = 16
+NY     = 16
+NZ     = 512
 PRWALL = 0.2
-D_T    = 1e-9
+D_T    = 0.5e-9
 RF_FREQ = 32.8e6
 Z_START = 0.0 #the start of the rfq
 SIM_START = -0.15
@@ -47,10 +47,10 @@ top.prwall   = PRWALL
 
 top.dt = D_T
 
-refinedsolver = MRBlock3D()
-registersolver(refinedsolver)
-#solver = MultiGrid3D()
-#registersolver(solver)
+# refinedsolver = MRBlock3D()
+# registersolver(refinedsolver)
+solver = MultiGrid3D()
+registersolver(solver)
 
 top.npinject = 50
 top.inject   = 1
@@ -65,7 +65,7 @@ top.injctspc = 1000000
 ##########################################
 # RFQ creation and initialization of parameters
 
-rfq = PyRFQ(filename=FILENAME, from_cells=False, twoterm=True, boundarymethod=False)
+rfq = PyRFQ(filename=FILENAME, from_cells=True, twoterm=True, boundarymethod=False)
 rfq.vane_radius       = VANE_RAD
 rfq.vane_distance     = VANE_DIST
 rfq.zstart            = Z_START
@@ -154,14 +154,14 @@ def callutils():
 
 starttime = time.time()
 
-step(1077)
+step(2000)
 hcp()
 
 endtime = time.time()
 
 print("Elapsed time for simulation: {} seconds".format(endtime-starttime))
 
-bunch = utils.find_bunch(max_steps=1000)
+bunch = utils.find_bunch(max_steps=10000)
 
 
 part_x = beam.getx()
