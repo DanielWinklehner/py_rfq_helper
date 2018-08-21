@@ -195,7 +195,7 @@ class PyRfqUtils(object):
         refresh()
 
     def make_plots(self):
-        if top.it%1 == 0:
+        if top.it%10 == 0:
             self.beamplots()
 
     def plot_rms_graph(self, start, end, bucketsize=0.002):

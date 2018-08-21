@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import pickle
 import numpy as np
 
-bunch = pickle.load(open("bunch_particles.2.dump", "rb"))
+bunch = pickle.load(open("bunch_particles.0.dump", "rb"))
 
 z = bunch["z"]
 vz = bunch["vz"]
