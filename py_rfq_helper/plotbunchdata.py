@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import pickle
 import numpy as np
 
-bunch = pickle.load(open("bunch_particles.0.dump", "rb"))
+bunch = pickle.load(open("bunch_particles.1.dump", "rb"))
 
 z = bunch["z"]
 vz = bunch["vz"]
@@ -10,10 +10,10 @@ y = bunch["y"]
 x = bunch["x"]
 xp = bunch["xp"]
 yp = bunch["yp"]
-idx = np.where(vz > 2.5e6)
+#idx = np.where(vz > 2.5e6)
+idx = np.where(vz > 0)
 
-
-plt.scatter(z[idx] - np.mean(z[idx]), vz[idx], 10, marker='.')
+plt.scatter(z[idx] - np.mean(z[idx]), vz[idx], 1, marker='.')
 plt.xlabel("Z")
 plt.ylabel("Vz")
 plt.title("Vz vs. Z")
