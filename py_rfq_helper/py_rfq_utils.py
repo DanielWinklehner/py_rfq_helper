@@ -9,6 +9,7 @@ from warp import *
 import numpy as np
 import pickle
 import os
+import matplotlib.pyplot as plt
 
 class PyRfqUtils(object):
 
@@ -95,7 +96,7 @@ class PyRfqUtils(object):
             print("Result: {},  Desired: {}".format(np.mean(z_positions), (self._zfar + self._zclose) / 2))
             print("RestulR: {},  Desired:  {}".format(np.around(np.mean(z_positions), decimals=2), np.around((self._zfar + self._zclose) / 2, decimals=2)))
 
-            if (np.around(np.mean(z_positions), decimals=2) == (np.around(((self._zfar - self._zclose) / 2) + self._zclose, decimals=2))):
+            if (np.around(np.mean(z_positions), decimals=3) == (np.around(((self._zfar - self._zclose) / 2) + self._zclose, decimals=3))):
                 print("==========================\nFound a bunch!\n=================================")
                 self._bunchfound = True
                 
@@ -199,12 +200,14 @@ class PyRfqUtils(object):
             self.beamplots()
 
     def plot_rms_graph(self, start, end, bucketsize=0.002):
-        
+    
         beam = self._beam
 
         x = beam.getx()
         y = beam.gety()
         z = beam.getz()
+
+        data = np.array(list(zip(x, y, z)))
 
         def rms(ray):
             temp = np.array(ray)
@@ -213,7 +216,24 @@ class PyRfqUtils(object):
             avg = np.sqrt(avg)
             return avg
 
-        bins = np.linspace(start, end, bucketsize)
-        xdigitized = np.digitize(x, bins)
-        ydigitized = np.digitize(y, bins)
+        bins = np.arange(start, end, bucketsize)
+        zdigitized = np.digitize(z,bins)
+
+        xrms_ray = []
+        yrms_ray = []
+
+        for i in range(1, len(bins)):
+            to_rms = data[zdigitized == i]
+            if len(to_rms) == 0:
+                xrms_ray += 0
+                yrms_ray += 0
+                continue
+            unzipped = list(zip(*to_rms))
+            print(rms(unzipped[0]))
+            xrms_ray.append(rms(unzipped[0]))
+            print(xrms_ray)
+            yrms_ray.append(rms(unzipped[1]))
+
+        plt.plot(xrms_ray, bins)
+        plt.show()
 

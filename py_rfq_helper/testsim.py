@@ -154,7 +154,7 @@ def callutils():
 
 starttime = time.time()
 
-step(15000)
+step(20000)
 hcp()
 
 endtime = time.time()
@@ -164,7 +164,8 @@ print("Elapsed time for simulation: {} seconds".format(endtime-starttime))
 bunch = utils.find_bunch(max_steps=10000)
 utils.make_plots()
 
-print("Elapsed time for simulation: {} seconds".format(endtime-starttime))
+# utils.plot_rms_graph(SIM_START, rfq._sim_end)
+
 
 part_x = beam.getx()
 part_y = beam.gety()
