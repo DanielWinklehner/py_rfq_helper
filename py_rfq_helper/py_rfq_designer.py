@@ -2504,6 +2504,12 @@ class PyRFQ(object):
         self.sim_start      = 0.0   # start of the simulation
         self.sim_end_buffer = 0.0   # added distance not part of RFQ but part of simulation
         self.resolution     = 0.002
+        self.endplates      = False
+        self.endplates_outer_diameter = 0.2
+        self.endplates_inner_diameter = 0.1
+        self.endplates_distance_from_vanes = 0.1
+        self.endplates_thickness = 0.1
+
 
         self.xy_limits     = None   # X and Y limits in the field calculation
         self.z_limits      = None   # Z limits for the field calculation
@@ -2523,6 +2529,7 @@ class PyRFQ(object):
         self._field         = field.FieldLoader()
         self._sim_end       = 0.0
         self._length        = 0.0
+        self._fieldzmax     = 0.0
 
         # Debugging
         self._ray           = [] #debugging
@@ -3540,6 +3547,7 @@ class PyRFQ(object):
 
         self._sim_end = self._field._zmax + self.sim_end_buffer
 
+        self._fieldzmax  = self._field._zmax
         self.import_field()
         
         self.create_vanes()
@@ -3667,6 +3675,7 @@ class PyRFQ(object):
         
         addnewegrd(id=egrd, zs=0, xs=self._field._xmin, ys=self._field._ymin, ze=self._field._z_length, func=fieldscaling)
 
+
         # winon()
         # self.plot_efield()
         # fma()
@@ -3698,7 +3707,11 @@ class PyRFQ(object):
             rod3 = ZCylinder(self.vane_radius, length, zcent=zcent, ycent=self.vane_distance)
             rod4 = ZCylinder(self.vane_radius, length, zcent=zcent, ycent=-self.vane_distance)
             total_conductors += rod1 + rod2 + rod3 + rod4
-        
+        if (self.endplates):
+            firstendplate = ZCylinderOut(self.endplates_inner_diameter, self.endplates_thickness, zcent=self._field._zmin-self.endplates_distance_from_vanes)
+            endendplate = ZCylinderOut(self.endplates_inner_diameter, self.endplates_thickness, zcent=self._field._zmax+self.endplates_distance_from_vanes)
+            total_conductors += firstendplate + endendplate
+
 
         installconductor(total_conductors)
         scraper = ParticleScraper(total_conductors)

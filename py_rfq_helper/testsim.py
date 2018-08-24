@@ -73,6 +73,7 @@ rfq.rf_freq           = RF_FREQ
 rfq.sim_start         = SIM_START
 rfq.sim_end_buffer    = 0.5
 rfq.resolution        = 0.002
+rfq.endplates = True
 
 rfq.xy_limits         = [-0.03, 0.03, -0.03, 0.03]
 rfq.z_limits          = [0, 1.4]
@@ -154,7 +155,7 @@ def callutils():
 
 starttime = time.time()
 
-step(20000)
+step(15000)
 hcp()
 
 endtime = time.time()
@@ -164,7 +165,7 @@ print("Elapsed time for simulation: {} seconds".format(endtime-starttime))
 bunch = utils.find_bunch(max_steps=10000)
 utils.make_plots()
 
-# utils.plot_rms_graph(SIM_START, rfq._sim_end)
+utils.plot_rms_graph(SIM_START, rfq._field._zmax / 2)
 
 
 part_x = beam.getx()

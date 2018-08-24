@@ -199,7 +199,7 @@ class PyRfqUtils(object):
         if top.it%10 == 0:
             self.beamplots()
 
-    def plot_rms_graph(self, start, end, bucketsize=0.002):
+    def plot_rms_graph(self, start, end, bucketsize=0.0001):
     
         beam = self._beam
 
@@ -222,18 +222,27 @@ class PyRfqUtils(object):
         xrms_ray = []
         yrms_ray = []
 
-        for i in range(1, len(bins)):
+        for i in range(1, len(bins) + 1):
             to_rms = data[zdigitized == i]
-            if len(to_rms) == 0:
-                xrms_ray += 0
-                yrms_ray += 0
+            if (len(to_rms) == 0):
+                xrms_ray.append(0)
+                yrms_ray.append(0)
                 continue
             unzipped = list(zip(*to_rms))
-            print(rms(unzipped[0]))
+            # if (rms(unzipped[0]) > 0.02):
+            #     xrms_ray.append(0.02)
+            # else:
+            #     xrms_ray.append(rms(unzipped[0]))
+            # if (rms(unzipped[1]) > 0.02):
+            #     yrms_ray.append(0.02)
+            # else:
+            #     yrms_ray.append(rms(unzipped[1]))
             xrms_ray.append(rms(unzipped[0]))
-            print(xrms_ray)
             yrms_ray.append(rms(unzipped[1]))
+            # xrms_ray.append(np.mean(unzipped[0]))
+            # yrms_ray.append(np.mean(unzipped[1]))
 
-        plt.plot(xrms_ray, bins)
+        plt.plot(bins, xrms_ray)
+        plt.plot(bins, yrms_ray)
         plt.show()
 
