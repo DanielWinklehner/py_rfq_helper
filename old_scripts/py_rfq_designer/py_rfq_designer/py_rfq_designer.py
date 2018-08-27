@@ -15,6 +15,7 @@ import datetime
 import time
 import copy
 import os
+import sys
 import shutil
 
 # Check if we can connect to a display, if not disable all plotting and windowed stuff (like gmsh)
@@ -24,6 +25,7 @@ if "DISPLAY" in os.environ.keys():
 else:
     x11disp = False
 
+# --- Try importing BEMPP
 try:
     import bempp.api
     from bempp.api.shapes.shapes import __generate_grid_from_geo_string as generate_from_string
@@ -32,13 +34,24 @@ except ImportError:
     bempp = None
     generate_from_string = None
 
+# --- Try importing mpi4py, if it fails, we fall back to single processor
 try:
     from mpi4py import MPI
+    COMM = MPI.COMM_WORLD
+    RANK = COMM.Get_rank()
+    SIZE = COMM.Get_size()
+    HOST = MPI.Get_processor_name()
+    print("Process {} of {} on host {} started!".format(RANK+1, SIZE, HOST))
 except ImportError:
-    print("Could not import mpi4py!")
+    print("Could not import mpi4py, falling back to single core (and python multiprocessing in some instances)!")
     MPI = None
-    exit()
+    COMM = None
+    RANK = 0
+    SIZE = 1
+    import socket
+    HOST = socket.gethostname()
 
+# --- Try importing pythonocc-core
 HAVE_OCC = False
 try:
     from OCC.Extend.DataExchange import read_stl_file
@@ -47,27 +60,22 @@ try:
     from OCC.Core.BRepTools import breptools_Write
     from OCC.Core.BRepBndLib import brepbndlib_Add
     from OCC.Core.Bnd import Bnd_Box
-
+    from OCC.Core.gp import gp_Pnt
+    from OCC.Core.BRepClass3d import BRepClass3d_SolidClassifier
+    from OCC.Core.TopAbs import TopAbs_ON, TopAbs_OUT, TopAbs_IN
     HAVE_OCC = True
 except ImportError:
     print("Something went wrong during OCC import. No CAD support possible!")
 
-COMM = MPI.COMM_WORLD
-RANK = COMM.Get_rank()
-SIZE = COMM.Get_size()
-HOST = MPI.Get_processor_name()
-GMSH_EXE = "E:\gmsh\gmsh.exe"
-
+USE_MULTIPROC = True  # In case we are not using mpi or only using 1 processor, fall back on multiprocessing
+# GMSH_EXE = "C:\gmsh3\gmsh.exe"  # TODO: For now use gmsh 3.0, because new 4.0 has problems with surface normals
+GMSH_EXE = "gmsh"
 HAVE_TEMP_FOLDER = False
-
-print("Process {} of {} on host {} started!".format(RANK, SIZE, HOST))
-
 np.set_printoptions(threshold=10000)
 
 # For now, everything involving the pymodules with be done on master proc (RANK 0)
 if RANK == 0:
     from dans_pymodules import *
-
     colors = MyColors()
 else:
     colors = None
@@ -82,27 +90,14 @@ amu = const.value("atomic mass constant energy equivalent in MeV")
 echarge = const.value("elementary charge")
 clight = const.value("speed of light in vacuum")
 
-# Define the directions:
+# Define the axis directions and vane rotations:
 X = 0
 Y = 1
 Z = 2
+
 XYZ = range(3)
+
 AXES = {"X": 0, "Y": 1, "Z": 2}
-
-# --- This is a nice implementation of a simple timer I found online -DW --- #
-_tm = 0
-
-
-def stopwatch(msg=''):
-    tm = time.time()
-    global _tm
-    if _tm == 0:
-        _tm = tm
-        return
-    print("%s: %.2f ms" % (msg, 1000.0 * (tm - _tm)))
-    _tm = tm
-# ------------------------------------------------------------------------- #
-
 
 rot_map = {"yp": 0.0,
            "ym": 180.0,
@@ -734,7 +729,6 @@ EndFor
                 # Add physical surface to identify this vane in gmsh (unmirrored)
                 gmsh_str += "Physical Surface({}) = {{1:{}, -new_surfs[]}};\n\n".format(self._mesh_params["domain_idx"],
                                                                                         surf_count)
-
                 # Rotate if necessary
                 if self.vane_type == "xp":
                     gmsh_str += "Rotate {{{{0, 0, 1}}, {{0, 0, 0}}, {}}} " \
@@ -783,12 +777,13 @@ EndFor
 
         return gmsh_str
 
-    def generate_occ(self):
+    def generate_stl(self):
 
         tmp_dir = self._parent_rfq.temp_dir
 
-        if HAVE_OCC and tmp_dir is not None:
+        if tmp_dir is not None:
 
+            # TODO: For now, restrict this to proc 0
             geo_fn = os.path.join(tmp_dir, "test_{}.geo".format(self.vane_type))
             msh_fn = os.path.splitext(geo_fn)[0] + ".msh"
             stl_fn = os.path.splitext(geo_fn)[0] + ".stl"
@@ -800,11 +795,13 @@ EndFor
             command = "{} \"{}\" -2 -order 1 -o \"{}\"".format(GMSH_EXE, geo_fn, msh_fn)
             if self._debug:
                 print("Running", command)
+                sys.stdout.flush()
             gmsh_success = os.system(command)
 
             command = "{} \"{}\" -0 -o \"{}\" -format stl".format(GMSH_EXE, msh_fn, stl_fn)
             if self._debug:
                 print("Running", command)
+                sys.stdout.flush()
             gmsh_success += os.system(command)
 
             if gmsh_success != 0:  # or not os.path.isfile("shape.stl"):
@@ -812,11 +809,21 @@ EndFor
                       "the correct path at the beginning of the file!")
                 return 1
 
-            # Create the OCC solid + bbox and save in vane
-            self._occ_params["solid"] = read_stl_file(stl_fn)
-            self._occ_params["bbox"] = Bnd_Box()
-            self._occ_params["bbox"].SetGap(self._occ_params["tolerance"])
-            brepbndlib_Add(self._occ_params["solid"], self._occ_params["bbox"])
+        return 0
+
+    def generate_occ(self):
+
+        print("Proc {} loading from STL file and generating OCC Object...".format(RANK + 1))
+        sys.stdout.flush()
+
+        tmp_dir = self._parent_rfq.temp_dir
+        stl_fn = os.path.join(tmp_dir, "test_{}.stl".format(self.vane_type))
+
+        # Create the OCC solid + bbox and save in vane
+        self._occ_params["solid"] = read_stl_file(stl_fn)
+        self._occ_params["bbox"] = Bnd_Box()
+        self._occ_params["bbox"].SetGap(self._occ_params["tolerance"])
+        brepbndlib_Add(self._occ_params["solid"], self._occ_params["bbox"])
 
         return 0
 
@@ -978,6 +985,8 @@ EndFor
         for cell_no in range(len(self._cells)):
             self._cells[cell_no].calculate_profile(cell_no, self._type, fudge=fudge)
 
+        sys.stdout.flush()
+
         self._has_profile = True
 
         return 0
@@ -1010,15 +1019,98 @@ EndFor
 
         return z, vane
 
-    # def plot_mesh(self):
-    #
-    #     if bempp is None or self._mesh is None:
-    #         print("Either BEMPP couldn't be loaded or there is not yet a mesh generated!")
-    #         return 1
-    #
-    #     self._mesh.plot()
-    #
-    #     return 0
+    def points_inside(self, points):
+        """
+        Function that calculates whether the point(s) is/are inside the vane or not.
+        Currently this only works with pythonocc-core installed and can be very slow
+        for a large number of points.
+        :param points: any shape (N, 3) structure holding the points to check. Can be a list of tuples,
+                       a list of lists, a numpy array of points (N, 3)...
+                       Alternatively: a single point with three coordinates (list, tuple or numpy array)
+        :return: boolean numpy array of True or False depending on whether the points are inside or
+                 outside (on the surface is counted as inside!)
+        """
+
+        assert self._occ_params["bbox"] is not None, "Couldn't find bounding box for this vane!"
+
+        global_pts = np.array(points)
+
+        single = False
+        if global_pts.shape == (3,):
+            single = True
+            global_pts = global_pts[np.newaxis, :]
+
+        assert len(global_pts.shape) == 2 and global_pts.shape[1] == 3, "'points' has shape {}, " \
+                                                                        "when it should be shape (N, 3) for array, " \
+                                                                        "or (3,) for single point!".format(
+            global_pts.shape)
+
+        # Divide points array into pieces to be worked on in parallel (if we have MPI)
+        npts = global_pts.shape[0]
+        pts_per_proc = int(npts / SIZE)
+
+        start = RANK * pts_per_proc
+        end = (RANK + 1) * pts_per_proc
+
+        # Highest proc needs to make sure last point is included
+        if RANK == SIZE - 1:
+            end = None
+
+        local_pts = global_pts[start:end]
+        n_loc_pts = local_pts.shape[0]
+        local_mask = np.zeros(n_loc_pts, dtype=bool)
+
+        # print("Host {}, proc {} of {}, local_pts =\n".format(HOST, RANK + 1, SIZE), local_pts)
+
+        for i, point in enumerate(local_pts):
+            _x, _y, _z = point
+            pt = gp_Pnt(_x, _y, _z)
+
+            if not self._occ_params["bbox"].IsOut(pt):
+
+                # local_mask[i] = True
+                _in_solid = BRepClass3d_SolidClassifier(self._occ_params["solid"],
+                                                        pt,
+                                                        self._occ_params["tolerance"])
+
+                if _in_solid.State() in [TopAbs_ON, TopAbs_IN]:
+                    # print("Point ({}/{}/{}/) is inside!".format(_x, _y, _z))
+                    local_mask[i] = True
+
+        if MPI is not None:
+            # Assemble global_mask on proc 0
+            if RANK == 0:
+                global_mask = np.zeros(npts, dtype=bool)
+                global_mask[0:pts_per_proc] = local_mask[:]
+
+                for proc in range(SIZE-1):
+
+                    start = (proc + 1) * pts_per_proc
+                    end = (proc + 2) * pts_per_proc
+
+                    # Highest proc needs to make sure last point is included
+                    if proc == SIZE - 2:
+                        end = None
+
+                    global_mask[start:end] = COMM.recv(source=proc + 1)
+
+                mpi_data = {"global_mask": global_mask}
+
+            else:
+
+                COMM.send(local_mask, dest=0)
+                mpi_data = None
+
+            mask = COMM.bcast(mpi_data, root=0)["global_mask"]
+
+        else:
+
+            mask = local_mask
+
+        if single:
+            return mask[0]
+
+        return mask
 
 
 # noinspection PyUnresolvedReferences
@@ -1066,24 +1158,35 @@ class PyRFQ(object):
 
     def create_temp_dir(self):
 
-        tmp_path = os.path.join(os.getcwd(), "temp")
+        if RANK == 0:
 
-        if not os.path.exists(tmp_path):
-            os.mkdir(tmp_path)
+            tmp_path = os.path.join(os.getcwd(), "temp")
+
+            if not os.path.exists(tmp_path):
+                os.mkdir(tmp_path)
+            else:
+                shutil.rmtree(tmp_path)
+                os.mkdir(tmp_path)
+
+            if os.path.exists(tmp_path):
+                global HAVE_TEMP_FOLDER
+                HAVE_TEMP_FOLDER = True
+            else:
+                print("Could not create temp folder. Aborting.")
+                exit(1)
+
+            mpi_data = {"tmp_path": tmp_path}
+
         else:
-            shutil.rmtree(tmp_path)
-            os.mkdir(tmp_path)
 
-        if os.path.exists(tmp_path):
-            global HAVE_TEMP_FOLDER
-            HAVE_TEMP_FOLDER = True
-        else:
-            print("Could not create temp folder. Aborting.")
-            exit(1)
+            mpi_data = None
 
-        self._temp_dir = tmp_path
+        if MPI is not None:
+            mpi_data = COMM.bcast(mpi_data, root=0)
 
-        return tmp_path
+        self._temp_dir = mpi_data["tmp_path"]
+
+        return self._temp_dir
 
     def __str__(self):
         text = "\nPyRFQ object with {} cells and length {:.4f} m. Vane voltage = {} V\n".format(self._cell_nos[-1],
@@ -1162,6 +1265,7 @@ class PyRFQ(object):
         """
 
         if filename is None:
+
             if RANK == 0:
                 # print("Process {} getting filename from dialog".format(RANK))
                 # from dans_pymodules import FileDialog
@@ -1175,7 +1279,9 @@ class PyRFQ(object):
                 data = None
                 # print("Process {} received filename {}.".format(RANK, data["fn"]))
 
-            data = COMM.bcast(data, root=0)
+            if MPI is not None:
+                data = COMM.bcast(data, root=0)
+
             filename = data["fn"]
 
         if filename is None:
@@ -1256,6 +1362,7 @@ class PyRFQ(object):
                                              shift_cell_no=False,
                                              prev_cell=pc,
                                              next_cell=None))
+
                 if len(self._cells) > 1:
                     self._cells[-2].set_next_cell(self._cells[-1])
 
@@ -1763,12 +1870,37 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
                                      debug=self._debug,
                                      occ_tolerance=self._occ_tolerance))
 
-        # TODO: Avoid multiproc in lieu of MPI?
         # Generate the two vanes in parallel:
-        p = Pool(2)
-        self._vanes = p.map(self.generate_vanes_worker_1, self._vanes)
+        if MPI is None or SIZE == 1:
+            if USE_MULTIPROC:
+                p = Pool(2)
+                self._vanes = p.map(self.generate_vanes_worker, self._vanes)
+            else:
+                for i, _vane in enumerate(self._vanes):
+                    self._vanes[i] = self.generate_vanes_worker(_vane)
 
-        # Now make copies, set vane_type again and recalculate gmsh_str
+        else:
+
+            if RANK == 0:
+                print("Proc {} working on vane {}".format(RANK, self._vanes[0].vane_type))
+                sys.stdout.flush()
+                _vane = self.generate_vanes_worker(self._vanes[0])
+                mpi_data = {"vanes": [_vane, COMM.recv(source=1)]}
+            elif RANK == 1:
+                print("Proc {} working on vane {}".format(RANK, self._vanes[0].vane_type))
+                sys.stdout.flush()
+                _vane = self.generate_vanes_worker(self._vanes[1])
+                COMM.send(_vane, dest=0)
+                mpi_data = None
+            else:
+                print("Proc {} idle.".format(RANK))
+                sys.stdout.flush()
+                mpi_data = None
+
+            mpi_data = COMM.bcast(mpi_data, root=0)
+            self._vanes = mpi_data["vanes"]
+
+        # --- Now make copies, set vane_type again and recalculate gmsh_str
         dx_h = self._variables_bempp["grid_res"]
 
         for i, vane_type in enumerate(["ym", "xm"]):
@@ -1778,13 +1910,89 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
                                        symmetry=False, mirror=False)
             self._vanes.append(new_vane)
 
-        # TODO: multiprocessing doesn't support occ objects, so need to figure out how to MPI this.
+        if MPI is None or SIZE == 1:
+            # no mpi or single core: use python multiprocessing and at least have threads for speedup
+            if USE_MULTIPROC:
+                p = Pool(4)
+                self._vanes = p.map(self.generate_stl_worker, self._vanes)
+            else:
+                for i, _vane in enumerate(self._vanes):
+                    self._vanes[i] = self.generate_stl_worker(_vane)
+
+        elif SIZE >= 4:
+            # We have 4 or moreprocs and can use a single processor per vane
+
+            if RANK <= 3:
+                # Generate on proc 0-3
+                print("Proc {} working on vane {}.".format(RANK + 1, self._vanes[RANK].vane_type))
+                sys.stdout.flush()
+                _vane = self.generate_stl_worker(self._vanes[RANK])
+                # _vane.generate_occ()
+
+                if RANK == 0:
+                    # Assemble on proc 0
+                    mpi_data = {"vanes": [_vane,
+                                          COMM.recv(source=1),
+                                          COMM.recv(source=2),
+                                          COMM.recv(source=3)]}
+                else:
+                    COMM.send(_vane, dest=0)
+                    mpi_data = None
+
+            else:
+                print("Proc {} idle.".format(RANK + 1))
+                sys.stdout.flush()
+                mpi_data = None
+
+            # Distribute
+            self._vanes = COMM.bcast(mpi_data, root=0)["vanes"]
+            COMM.barrier()
+
+        else:
+            # We have 2 or 3 procs, so do two vanes each on proc 0 and proc 1
+            if RANK <= 1:
+                # Generate on proc 0, 1
+                print("Proc {} working on vanes {} and {}.".format(RANK + 1,
+                                                                   self._vanes[RANK].vane_type,
+                                                                   self._vanes[RANK + 2].vane_type))
+                sys.stdout.flush()
+                local_vanes = [self.generate_stl_worker(self._vanes[RANK]),
+                               self.generate_stl_worker(self._vanes[RANK + 2])]
+
+                if RANK == 0:
+                    # Assemble on proc 0
+                    other_vanes = COMM.recv(source=1)
+                    mpi_data = {"vanes": [local_vanes[0],
+                                          other_vanes[0],
+                                          local_vanes[1],
+                                          other_vanes[1]]}
+                else:
+                    COMM.send(local_vanes, dest=0)
+                    mpi_data = None
+
+            else:
+                print("Proc {} idle.".format(RANK + 1))
+                sys.stdout.flush()
+                mpi_data = None
+
+            # Distribute
+            self._vanes = COMM.bcast(mpi_data, root=0)["vanes"]
+            COMM.barrier()
+
+        # Unfortunately, multiprocessing/MPI can't handle SwigPyObject objects
         for _vane in self._vanes:
             _vane.generate_occ()
 
         return 0
 
-    def generate_vanes_worker_1(self, vane):
+    @staticmethod
+    def generate_stl_worker(vane):
+
+        vane.generate_stl()
+
+        return vane
+
+    def generate_vanes_worker(self, vane):
 
         dx_h = self._variables_bempp["grid_res"]
 
@@ -2114,7 +2322,7 @@ if __name__ == "__main__":
                       length=0.04858)
 
     # Load the base RFQ design from the parmteq file
-    if myrfq.add_cells_from_file(ignore_rms=True) == 1:
+    if myrfq.add_cells_from_file(ignore_rms=True) != 0:
         exit()
 
     myrfq.append_cell(cell_type="TCS",
@@ -2219,6 +2427,33 @@ if __name__ == "__main__":
     ts = time.time()
     myrfq.generate_vanes()
     print("Generating vanes took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
+
+    # generate some test points:
+    rlim = 0.03  # m
+    zpos = 0.5  # m
+    res = 0.001
+    nx = ny = 2 * rlim / res + 1
+
+    x_coords, y_coords, z_coords = np.meshgrid(np.linspace(-rlim, rlim, nx),
+                                               np.linspace(-rlim, rlim, ny),
+                                               np.array([zpos]))
+
+    mypoints = np.array([x_coords.flatten(), y_coords.flatten(), z_coords.flatten()]).T
+
+    # Test points_inside function
+    mymask = np.zeros(mypoints.shape[0], dtype=bool)
+    for _vane in myrfq._vanes:
+        mymask += _vane.points_inside(mypoints)
+
+    # plot the inside/outside values
+    if RANK == 0:
+
+        mypoints = mypoints.T
+        plt.scatter(mypoints[0], mypoints[1], c=mymask)
+        plt.xlim(-rlim, rlim)
+        plt.ylim(-rlim, rlim)
+        plt.gca().set_aspect("equal")
+        plt.show()
 
     exit()
 
