@@ -17,6 +17,7 @@ import copy
 import os
 import sys
 import shutil
+from py_electrodes import ElectrodeObject
 
 # Check if we can connect to a display, if not disable all plotting and windowed stuff (like gmsh)
 # TODO: This does not remotely cover all cases!
@@ -68,7 +69,7 @@ except ImportError:
     print("Something went wrong during OCC import. No CAD support possible!")
 
 USE_MULTIPROC = True  # In case we are not using mpi or only using 1 processor, fall back on multiprocessing
-# GMSH_EXE = "C:\gmsh3\gmsh.exe"  # TODO: For now use gmsh 3.0, because new 4.0 has problems with surface normals
+# GMSH_EXE = "C:\gmsh3\gmsh.exe"  # TODO: For now use gmsh 3.0, because new 4.0 handles surface normals differently
 GMSH_EXE = "gmsh"
 HAVE_TEMP_FOLDER = False
 np.set_printoptions(threshold=10000)
@@ -422,7 +423,7 @@ class PyRFQVane(object):
         self._voltage = voltage
         self._has_profile = False
         self._fudge = False
-
+        self._elec = None
         self._length = np.sum([cell.length for cell in self._cells])  # type: float
 
         self._mesh_params = {"dx": 0.005,  # Mesh size (m)
@@ -813,17 +814,20 @@ EndFor
 
     def generate_occ(self):
 
-        print("Proc {} loading from STL file and generating OCC Object...".format(RANK + 1))
-        sys.stdout.flush()
+        # print("Proc {} loading from STL file and generating OCC Object...".format(RANK + 1))
+        # sys.stdout.flush()
 
         tmp_dir = self._parent_rfq.temp_dir
         stl_fn = os.path.join(tmp_dir, "test_{}.stl".format(self.vane_type))
 
         # Create the OCC solid + bbox and save in vane
-        self._occ_params["solid"] = read_stl_file(stl_fn)
-        self._occ_params["bbox"] = Bnd_Box()
-        self._occ_params["bbox"].SetGap(self._occ_params["tolerance"])
-        brepbndlib_Add(self._occ_params["solid"], self._occ_params["bbox"])
+        # self._occ_params["solid"] = read_stl_file(stl_fn)
+        # self._occ_params["bbox"] = Bnd_Box()
+        # self._occ_params["bbox"].SetGap(self._occ_params["tolerance"])
+        # brepbndlib_Add(self._occ_params["solid"], self._occ_params["bbox"])
+
+        self._elec = ElectrodeObject()
+        self._elec.load_from_stl(stl_fn)
 
         return 0
 
@@ -1031,86 +1035,88 @@ EndFor
                  outside (on the surface is counted as inside!)
         """
 
-        assert self._occ_params["bbox"] is not None, "Couldn't find bounding box for this vane!"
+        # assert self._occ_params["bbox"] is not None, "Couldn't find bounding box for this vane!"
+        #
+        # global_pts = np.array(points)
+        #
+        # single = False
+        # if global_pts.shape == (3,):
+        #     single = True
+        #     global_pts = global_pts[np.newaxis, :]
+        #
+        # assert len(global_pts.shape) == 2 and global_pts.shape[1] == 3, "'points' has shape {}, " \
+        #                                                                 "when it should be shape (N, 3) for array, " \
+        #                                                                 "or (3,) for single point!".format(
+        #     global_pts.shape)
+        #
+        # # Divide points array into pieces to be worked on in parallel (if we have MPI)
+        # npts = global_pts.shape[0]
+        # pts_per_proc = int(npts / SIZE)
+        #
+        # start = RANK * pts_per_proc
+        # end = (RANK + 1) * pts_per_proc
+        #
+        # # Highest proc needs to make sure last point is included
+        # if RANK == SIZE - 1:
+        #     end = None
+        #
+        # local_pts = global_pts[start:end]
+        # n_loc_pts = local_pts.shape[0]
+        # local_mask = np.zeros(n_loc_pts, dtype=bool)
+        #
+        # if self._debug:
+        #     print("Host {}, proc {} of {}, local_pts =\n".format(HOST, RANK + 1, SIZE), local_pts)
+        #
+        # for i, point in enumerate(local_pts):
+        #
+        #     _x, _y, _z = point
+        #     pt = gp_Pnt(_x, _y, _z)
+        #
+        #     if not self._occ_params["bbox"].IsOut(pt):
+        #
+        #         # local_mask[i] = True
+        #         _in_solid = BRepClass3d_SolidClassifier(self._occ_params["solid"],
+        #                                                 pt,
+        #                                                 self._occ_params["tolerance"])
+        #
+        #         if _in_solid.State() in [TopAbs_ON, TopAbs_IN]:
+        #             # print("Point ({}/{}/{}/) is inside!".format(_x, _y, _z))
+        #             local_mask[i] = True
+        #
+        # if MPI is not None:
+        #     # Assemble global_mask on proc 0
+        #     if RANK == 0:
+        #         global_mask = np.zeros(npts, dtype=bool)
+        #         global_mask[0:pts_per_proc] = local_mask[:]
+        #
+        #         for proc in range(SIZE-1):
+        #
+        #             start = (proc + 1) * pts_per_proc
+        #             end = (proc + 2) * pts_per_proc
+        #
+        #             # Highest proc needs to make sure last point is included
+        #             if proc == SIZE - 2:
+        #                 end = None
+        #
+        #             global_mask[start:end] = COMM.recv(source=proc + 1)
+        #
+        #         mpi_data = {"global_mask": global_mask}
+        #
+        #     else:
+        #
+        #         COMM.send(local_mask, dest=0)
+        #         mpi_data = None
+        #
+        #     mask = COMM.bcast(mpi_data, root=0)["global_mask"]
+        #
+        # else:
+        #
+        #     mask = local_mask
+        #
+        # if single:
+        #     return mask[0]
 
-        global_pts = np.array(points)
-
-        single = False
-        if global_pts.shape == (3,):
-            single = True
-            global_pts = global_pts[np.newaxis, :]
-
-        assert len(global_pts.shape) == 2 and global_pts.shape[1] == 3, "'points' has shape {}, " \
-                                                                        "when it should be shape (N, 3) for array, " \
-                                                                        "or (3,) for single point!".format(
-            global_pts.shape)
-
-        # Divide points array into pieces to be worked on in parallel (if we have MPI)
-        npts = global_pts.shape[0]
-        pts_per_proc = int(npts / SIZE)
-
-        start = RANK * pts_per_proc
-        end = (RANK + 1) * pts_per_proc
-
-        # Highest proc needs to make sure last point is included
-        if RANK == SIZE - 1:
-            end = None
-
-        local_pts = global_pts[start:end]
-        n_loc_pts = local_pts.shape[0]
-        local_mask = np.zeros(n_loc_pts, dtype=bool)
-
-        # print("Host {}, proc {} of {}, local_pts =\n".format(HOST, RANK + 1, SIZE), local_pts)
-
-        for i, point in enumerate(local_pts):
-            _x, _y, _z = point
-            pt = gp_Pnt(_x, _y, _z)
-
-            if not self._occ_params["bbox"].IsOut(pt):
-
-                # local_mask[i] = True
-                _in_solid = BRepClass3d_SolidClassifier(self._occ_params["solid"],
-                                                        pt,
-                                                        self._occ_params["tolerance"])
-
-                if _in_solid.State() in [TopAbs_ON, TopAbs_IN]:
-                    # print("Point ({}/{}/{}/) is inside!".format(_x, _y, _z))
-                    local_mask[i] = True
-
-        if MPI is not None:
-            # Assemble global_mask on proc 0
-            if RANK == 0:
-                global_mask = np.zeros(npts, dtype=bool)
-                global_mask[0:pts_per_proc] = local_mask[:]
-
-                for proc in range(SIZE-1):
-
-                    start = (proc + 1) * pts_per_proc
-                    end = (proc + 2) * pts_per_proc
-
-                    # Highest proc needs to make sure last point is included
-                    if proc == SIZE - 2:
-                        end = None
-
-                    global_mask[start:end] = COMM.recv(source=proc + 1)
-
-                mpi_data = {"global_mask": global_mask}
-
-            else:
-
-                COMM.send(local_mask, dest=0)
-                mpi_data = None
-
-            mask = COMM.bcast(mpi_data, root=0)["global_mask"]
-
-        else:
-
-            mask = local_mask
-
-        if single:
-            return mask[0]
-
-        return mask
+        return self._elec.points_inside(points)
 
 
 # noinspection PyUnresolvedReferences
@@ -1134,13 +1140,17 @@ class PyRFQ(object):
                                  "grid_res": 0.005,  # grid resolution in (m)
                                  "ef_itp": None,  # type: Field
                                  "ef_phi": None,  # type: np.ndarray
+                                 "ef_mask": None,  # A numpy boolean array holding flags for points inside electrodes
                                  "pot_shift": 0.0,  # Shift all potentials by this value (and the solution back)
                                                     # This can help with jitter on z axis where pot ~ 0 otherwise
                                  # TODO: Should put pot in its own class that also holds dx, nx, etc.
                                  "add_cyl": False,  # Do we want to add a grounded cylinder to the BEMPP problem
                                  "add_endplates": False,  # Or just grounded end plates
                                  "cyl_id": 0.2,  # Inner diameter of surrounding cylinder
-                                 "cyl_gap": 0.01  # gap between vanes and cylinder TODO: Maybe make this asymmetric?
+                                 "cyl_gap": 0.01,  # gap between vanes and cylinder TODO: Maybe make this asymmetric?
+                                 "d": None,
+                                 "n": None,
+                                 "limits": None
                                  }
 
         self._variables_inventor = {"vane_type": "hybrid",
@@ -1267,22 +1277,15 @@ class PyRFQ(object):
         if filename is None:
 
             if RANK == 0:
-                # print("Process {} getting filename from dialog".format(RANK))
-                # from dans_pymodules import FileDialog
                 fd = FileDialog()
-                filename = fd.get_filename('open')
-                data = {"fn": filename}
-                # req = COMM.isend({'fn':filename}, dest=1, tag=11)
-                # req.wait()
+                mpi_data = {"fn": fd.get_filename('open')}
             else:
-                # req = COMM.irecv(source=0, tag=11)
-                data = None
-                # print("Process {} received filename {}.".format(RANK, data["fn"]))
+                mpi_data = None
 
             if MPI is not None:
-                data = COMM.bcast(data, root=0)
+                mpi_data = COMM.bcast(mpi_data, root=0)
 
-            filename = data["fn"]
+            filename = mpi_data["fn"]
 
         if filename is None:
             return 1
@@ -1412,7 +1415,11 @@ class PyRFQ(object):
         assert self._variables_bempp["ef_phi"] is not None, \
             "Please calculate the potential first!"
 
-        ex, ey, ez = np.gradient(self._variables_bempp["ef_phi"],
+        # TODO: Replace gradient with something that accepts mask
+        _d = self._variables_bempp["d"]
+        phi_masked = np.ma.masked_array(self._variables_bempp["ef_phi"],
+                                        mask=self._variables_bempp["ef_mask"])
+        ex, ey, ez = np.gradient(phi_masked,
                                  _d[X], _d[Y], _d[Z])
 
         if RANK == 0:
@@ -1520,22 +1527,46 @@ class PyRFQ(object):
             for i, dirs in enumerate(["x", "y", "z"]):
                 print("{}: Indices {} to {}".format(dirs, start_idxs[i], end_idxs[i] - 1))
 
+        # Calculate mask (True if inside/on surface of an electrode)
+        all_grid_pts = np.vstack([_mesh.ravel() for _mesh in mesh]).T
+        mymask = np.zeros(all_grid_pts.shape[0], dtype=bool)
+
+        _ts = time.time()
+        if RANK == 0:
+            print("Calculating mask for {} points".format(all_grid_pts.shape[0]))
+
+        # TODO: This does not include other electrodes at this point
+        for _vane in self._vanes:
+
+            if RANK == 0:
+                print("Working on vane {}".format(_vane.vane_type))
+
+            mymask = mymask | _vane.points_inside(all_grid_pts)
+
+        if RANK == 0:
+            print("Generating mask took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - _ts)))))
+
+        if RANK == 0:
+            print("Calculating potential")
+
         # Iterate over all the dimensions, calculate the subset of potential
         domain_idx = 1
         for x1, x2 in zip(start_idxs[X], end_idxs[X]):
             for y1, y2 in zip(start_idxs[Y], end_idxs[Y]):
                 for z1, z2 in zip(start_idxs[Z], end_idxs[Z]):
 
-                    print("[{}] Domain {}/{}, "
-                          "Index Limits: x = ({}, {}), "
-                          "y = ({}, {}), "
-                          "z = ({}, {})".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - _ts))),
-                                                domain_idx,
-                                                np.product(domain_decomp),
-                                                x1, x2 - 1, y1, y2 - 1, z1, z2 - 1))
+                    if RANK == 0:
+                        print("[{}] Domain {}/{}, "
+                              "Index Limits: x = ({}, {}), "
+                              "y = ({}, {}), "
+                              "z = ({}, {})".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - _ts))),
+                                                    domain_idx,
+                                                    np.product(domain_decomp),
+                                                    x1, x2 - 1, y1, y2 - 1, z1, z2 - 1))
 
                     grid_pts = np.vstack([_mesh[x1:x2, y1:y2, z1:z2].ravel() for _mesh in mesh])
 
+                    # TODO: Omit masked grid points from calculation...not needed later
                     sl_pot = bempp.api.operators.potential.laplace.single_layer(fsp, grid_pts)
                     _pot = sl_pot * sol
                     pot[x1:x2, y1:y2, z1:z2] = _pot.reshape([x2 - x1, y2 - y1, z2 - z1])
@@ -1547,6 +1578,10 @@ class PyRFQ(object):
                     del _pot
 
         self._variables_bempp["ef_phi"] = pot - self._variables_bempp["pot_shift"]
+        self._variables_bempp["ef_mask"] = mymask.T.reshape(mesh[0].shape)
+        self._variables_bempp["d"] = _d
+        self._variables_bempp["n"] = _n
+        self._variables_bempp["limits"] = limits
 
         return 0
 
@@ -1605,7 +1640,10 @@ class PyRFQ(object):
 
     def get_phi(self):
 
-        return self._variables_bempp["ef_phi"]
+        return {"phi": self._variables_bempp["ef_phi"],
+                "mask": self._variables_bempp["ef_mask"],
+                "d": self._variables_bempp["d"],
+                "n": self._variables_bempp["n"]}
 
     def generate_full_mesh(self):
 
@@ -2310,12 +2348,13 @@ End Sub
 
 if __name__ == "__main__":
 
-    myrfq = PyRFQ(voltage=22000.0, debug=True)
+    myrfq = PyRFQ(voltage=22000.0, debug=False)
 
     # myrfq.append_cell(cell_type="STA",
     #                   aperture=0.15,
     #                   modulation=1.0,
     #                   length=0.0)
+
     myrfq.append_cell(cell_type="DCS",
                       aperture=0.009289,
                       modulation=1.0,
@@ -2334,6 +2373,7 @@ if __name__ == "__main__":
                       aperture=0.0091540593,
                       modulation=1.0,
                       length=0.14)
+    # ------------------------------------------------- #
 
     # myrfq.append_cell(cell_type="STA",
     #                   aperture=0.0095691183,
@@ -2416,97 +2456,67 @@ if __name__ == "__main__":
     #                   modulation=0.038802 / 0.02919376887767351,
     #                   length=0.01828769716079613)
 
-    myrfq.set_bempp_parameter("add_endplates", True)
+    # TODO: Idea: Make ElectrodeObject class from which other electrodes inherit?
+    # TODO: Idea: Make ElectrostaticSolver class that can be reused (e.g. for Spiral Inflector)?
+    myrfq.set_bempp_parameter("add_endplates", False)  # TODO: Correct handling of OCC objects for endplates
     myrfq.set_bempp_parameter("cyl_id", 0.1)
-    myrfq.set_bempp_parameter("grid_res", 0.005)
+    myrfq.set_bempp_parameter("grid_res", 0.002)
     # myrfq.set_bempp_parameter("pot_shift", 3.0 * 22000.0)
+    # print(myrfq)
 
-    print(myrfq)
-
-    print("Generating vanes")
+    if RANK == 0:
+        print("Generating vanes")
     ts = time.time()
-    myrfq.generate_vanes()
-    print("Generating vanes took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
-
-    # generate some test points:
-    rlim = 0.03  # m
-    zpos = 0.5  # m
-    res = 0.001
-    nx = ny = 2 * rlim / res + 1
-
-    x_coords, y_coords, z_coords = np.meshgrid(np.linspace(-rlim, rlim, nx),
-                                               np.linspace(-rlim, rlim, ny),
-                                               np.array([zpos]))
-
-    mypoints = np.array([x_coords.flatten(), y_coords.flatten(), z_coords.flatten()]).T
-
-    # Test points_inside function
-    mymask = np.zeros(mypoints.shape[0], dtype=bool)
-    for _vane in myrfq._vanes:
-        mymask += _vane.points_inside(mypoints)
-
-    # plot the inside/outside values
+    myrfq.generate_vanes()  # TODO: Need to accept same input parameters (vane height, relative or absolute)
     if RANK == 0:
+        print("Generating vanes took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
-        mypoints = mypoints.T
-        plt.scatter(mypoints[0], mypoints[1], c=mymask)
-        plt.xlim(-rlim, rlim)
-        plt.ylim(-rlim, rlim)
-        plt.gca().set_aspect("equal")
-        plt.show()
-
-    exit()
+    # if RANK == 0:
+    #     myrfq.plot_vane_profile()
+    #     myrfq.write_inventor_macro(vane_type='vane',
+    #                                vane_radius=0.0093,
+    #                                vane_height=0.03,
+    #                                vane_height_type='absolute',
+    #                                nz=600)
 
     if RANK == 0:
-        myrfq.plot_vane_profile()
-        myrfq.write_inventor_macro(vane_type='vane',
-                                   vane_radius=0.0093,
-                                   vane_height=0.03,
-                                   vane_height_type='absolute',
-                                   nz=600)
-
-    print("Generating full mesh for BEMPP")
+        print("Generating full mesh for BEMPP")
     ts = time.time()
     myrfq.generate_full_mesh()
-    print("Meshing took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
+    if RANK == 0:
+        print("Meshing took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
     # input("Hit enter to continue...")
-
-    print("Solving BEMPP problem")
+    if RANK == 0:
+        print("Solving BEMPP problem")
     ts = time.time()
     myrfq.solve_bempp()
-    print("Solving BEMPP took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
+    if RANK == 0:
+        print("Solving BEMPP took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
-    # input("Hit enter to continue...")
-
-    print("Calculating Potential")
     ts = time.time()
-    myres = [0.002, 0.002, 0.002]
-    limit = 0.02
-    myrfq.calculate_potential(limits=((-limit, limit), (-limit, limit), (-0.1, 1.35)),
+    myres = [0.001, 0.001, 0.001]
+    rlim = 0.02
+    xlims = (-rlim, rlim)
+    ylims = (-rlim, rlim)
+    zlims = (-0.1, 1.35)
+    # zlims = (-0.1, 0.2)
+    myrfq.calculate_potential(limits=(xlims, ylims, zlims),
                               res=myres,
-                              domain_decomp=(1, 1, 50),
+                              domain_decomp=(1, 1, 15),
                               overlap=0)
-    print("Potential took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
+    if RANK == 0:
+        print("Potential took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
     import pickle
 
     with open("ef_phi.field", "wb") as outfile:
         pickle.dump(myrfq.get_phi(), outfile)
 
-    # import numpy.ma as ma
-    #
-    # epsilon = 0.012 * 22000
-    # masked_pot = ma.masked_array(mypot, mask=(np.abs(mypot) >= (22000 - epsilon)))
-    #
-    # plt.imshow(masked_pot[int(0.5 * pot.shape[0]), :, :].T, extent=(-0.1, 1.35, -0.015, 0.015))
-    # plt.xlabel("x (m)")
-    # plt.ylabel("y (m)")
-    # plt.title("Potential (V)")
-    # plt.colorbar()
-    # plt.show()
-    #
-    # exit()
+    # ts = time.time()
+    # myrfq.calculate_efield()
+    # if RANK == 0:
+    #     print("Field took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
     #
     # if RANK == 0:
     #     myrfq.plot_combo(xypos=0.005, xyscale=1.0, zlim=(-0.1, 1.35))
