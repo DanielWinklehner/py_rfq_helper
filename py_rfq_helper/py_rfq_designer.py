@@ -1,3 +1,6 @@
+# py_rfq_designer.py
+# Contains the FieldGenerator, PyRFQCell, PyRFQVane and PyRFQ classes.
+
 import numpy as np
 import scipy.constants as const
 from multiprocessing import Pool
@@ -2504,6 +2507,8 @@ class PyRFQ(object):
         self.sim_start      = 0.0   # start of the simulation
         self.sim_end_buffer = 0.0   # added distance not part of RFQ but part of simulation
         self.resolution     = 0.002
+        
+        #optional
         self.endplates      = False
         self.endplates_outer_diameter = 0.2
         self.endplates_inner_diameter = 0.1
@@ -2577,7 +2582,6 @@ class PyRFQ(object):
                     length,
                     flip_z=False,
                     shift_cell_no=False):
-
         assert cell_type in ["STA", "RMS", "NCS", "TCS", "DCS"], "cell_type must be one of STA, RMS, NCS, TCS, DCS!"
 
         if len(self._cells) > 0:
@@ -2641,6 +2645,9 @@ class PyRFQ(object):
         return 0
 
     def read_input_parmteq(self, filename, ignore_rms):
+        # Parameters: Filename, whether to ignore rms
+        # Returns: None
+        # Reads in cell data from a parmteq file
 
         with open(filename, "r") as infile:
 
@@ -2711,9 +2718,10 @@ class PyRFQ(object):
         self._cell_nos = range(len(self._cells))
         self._length = np.sum([cell.length for cell in self._cells])
 
-        return 0
-
     def read_input_vecc(self, filename, ignore_rms):
+        # Parameters: Filename and whether to ignore rms
+        # Returns: None
+        # Reads cell data in from vecc file
 
         with open(filename, "r") as infile:
 
@@ -2747,7 +2755,6 @@ class PyRFQ(object):
         self._cell_nos = range(len(self._cells))
         self._length = np.sum([cell.length for cell in self._cells])
 
-        return 0
 
     def calculate_efield(self):
         # TODO: missing parameters (_d)
@@ -3593,7 +3600,13 @@ class PyRFQ(object):
 
     def setup(self):
         # Parameters: None
+        # Returns: None
+        # Evaluates user parameters to ensure all dependencies are provided
+        # Calculates and/or loads the field into the field class
 
+        if (not self._filename):
+            print("Please provide a file. Exiting")
+            exit(1)
         if (not self.vane_radius) and (self.simple_rods):
             print("Please specify the vane radius (vane_radius) for the simple rod structure. Exiting.")
             exit(1)
@@ -3665,21 +3678,8 @@ class PyRFQ(object):
                          dx=self._field._dx,
                          dy=self._field._dy,
                          zlength=self._field._z_length)
-
-        print("=====================================")
-        print("xmin: " + str(self._field._xmin))
-        print("ymin {}".format(self._field._ymin))
-        print("nx {} ny {} nz {}".format(self._field._nx,self._field._ny,self._field._nz))
-        print("dx {} dy {} dz {}".format(self._field._dx,self._field._dy,self._field._dz))
-        print("======================================")
-        
+        # installs the field with the scaling function fieldscaling
         addnewegrd(id=egrd, zs=0, xs=self._field._xmin, ys=self._field._ymin, ze=self._field._z_length, func=fieldscaling)
-
-
-        # winon()
-        # self.plot_efield()
-        # fma()
-        # exit(1)
 
     def create_vanes(self):
         # create_vanes
@@ -3692,13 +3692,7 @@ class PyRFQ(object):
         self._length = length
         zcent  = (self._field._z_length / 2.0) + abs(self.zstart)
 
-        print("length of shell: {}".format(self._sim_end - self.sim_start))
-        print("simstart {}    simend {}".format(self.sim_start, self._sim_end))
-
-        print("zmin {}  zmax {}".format(self._field._zmax, self._field._zmin))
-        print("simend {} simstart {}".format(self._sim_end, self.sim_start))
-
-        outer_shell = ZCylinderOut(self.vane_distance + 0.05, (self._sim_end - self.sim_start), zcent=(self._sim_end + self.sim_start)/2)
+        outer_shell = ZCylinderOut(self.vane_distance + 0.02, (self._sim_end - self.sim_start), zcent=(self._sim_end + self.sim_start)/2)
         total_conductors = outer_shell
 
         if (self.simple_rods):
@@ -3711,7 +3705,6 @@ class PyRFQ(object):
             firstendplate = ZCylinderOut(self.endplates_inner_diameter, self.endplates_thickness, zcent=self._field._zmin-self.endplates_distance_from_vanes)
             endendplate = ZCylinderOut(self.endplates_inner_diameter, self.endplates_thickness, zcent=self._field._zmax+self.endplates_distance_from_vanes)
             total_conductors += firstendplate + endendplate
-
 
         installconductor(total_conductors)
         scraper = ParticleScraper(total_conductors)

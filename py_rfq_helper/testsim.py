@@ -10,17 +10,17 @@ import time
 #FILENAME  = "input/fieldoutput.txt"
 FILENAME  = "input/fieldw015width.dat"
 
-VANE_RAD  = 2 * cm
-VANE_DIST = 11 * cm
+VANE_RAD  = 1 * cm
+VANE_DIST = 1.5 * cm
 
 NX     = 16
 NY     = 16
 NZ     = 512
-PRWALL = 0.2
-D_T    = 1e-10
+PRWALL = 0.07
+D_T    = 1e-9
 RF_FREQ = 32.8e6
 Z_START = 0.0 #the start of the rfq
-SIM_START = -0.15
+SIM_START = -0.1
 setup()
 
 w3d.solvergeom = w3d.XYZgeom
@@ -73,7 +73,7 @@ rfq.rf_freq           = RF_FREQ
 rfq.sim_start         = SIM_START
 rfq.sim_end_buffer    = 0.5
 rfq.resolution        = 0.002
-rfq.endplates = True
+rfq.endplates = False
 
 rfq.xy_limits         = [-0.03, 0.03, -0.03, 0.03]
 rfq.z_limits          = [0, 1.4]
@@ -136,11 +136,11 @@ beam.xp0 = 0.0  # initial x-centroid angle xc' = <x'> = d<x>/ds [rad]
 beam.yp0 = 0.0  # initial y-centroid angle yc' = <y'> = d<y>/ds [rad]
 beam.a0 = 5 * mm  # initial x-envelope edge a = 2*sqrt(<(x-xc)^2>) [m]
 beam.b0 = 5 * mm  # initial y-envelope edge b = 2*sqrt(<(y-yc)^2>) [m]
-beam.ap0 = 0 # initial x-envelope angle ap = a' = d a/ds [rad]
-beam.bp0 = 0  # initial y-envelope angle bp = b' = d b/ds [rad]
+beam.ap0 = -0.06 # initial x-envelope angle ap = a' = d a/ds [rad]
+beam.bp0 = -0.06  # initial y-envelope angle bp = b' = d b/ds [rad]
 
 
-# This routine will calculate vbeam and other quantities.
+# This routine will calculate vbeam and other quantities.`
 derivqty()
 
 package("w3d")
@@ -151,11 +151,11 @@ utils = PyRfqUtils(rfq, beam)
 @callfromafterstep
 def callutils():
     global utils
-    utils.make_plots()
+    utils.make_plots(1)
 
 starttime = time.time()
 
-step(15000)
+step(1500)
 hcp()
 
 endtime = time.time()
@@ -165,7 +165,7 @@ print("Elapsed time for simulation: {} seconds".format(endtime-starttime))
 bunch = utils.find_bunch(max_steps=10000)
 utils.make_plots()
 
-utils.plot_rms_graph(SIM_START, rfq._field._zmax / 2)
+utils.plot_rms_graph(SIM_START, 2)
 
 
 part_x = beam.getx()

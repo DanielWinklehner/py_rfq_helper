@@ -55,6 +55,9 @@ class PyRfqUtils(object):
             if (self._bunchfound):
                 break
 
+        if (not self._bunchfound):
+            self._bunch_particles = None
+
         endtime = time.time()
         print("It took {} seconds to find a bunch.".format(endtime - starttime))
 
@@ -195,11 +198,11 @@ class PyRfqUtils(object):
         self.plotYphase()
         refresh()
 
-    def make_plots(self):
-        if top.it%10 == 0:
+    def make_plots(self, rate=10):
+        if top.it%rate == 0:
             self.beamplots()
 
-    def plot_rms_graph(self, start, end, bucketsize=0.0001):
+    def plot_rms_graph(self, start, end, bucketsize=0.001):
     
         beam = self._beam
 
