@@ -111,6 +111,7 @@ venv.bak/
 *.msh
 *.dump
 *~
+*.mp4
 
 # the pycharm settings folder
 /.idea
