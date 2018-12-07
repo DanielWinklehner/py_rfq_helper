@@ -10,6 +10,8 @@ import numpy as np
 import pickle
 import os
 import matplotlib.pyplot as plt
+import bisect
+
 
 class PyRfqUtils(object):
 
@@ -243,3 +245,94 @@ class PyRfqUtils(object):
         plt.plot(bins, yrms_ray)
         plt.show()
 
+    def find_nearest(self, array,value):
+        idx = np.searchsorted(array, value, side="left")
+        if idx > 0 and (idx == len(array) or math.fabs(value - array[idx-1]) < math.fabs(value - array[idx])):
+            return idx-1
+        else:
+            return idx
+
+    # Assumes symmetry about the z-axis
+    def find_vane_mesh_boundaries(self, NX, sim_start, sim_end, sim_xmin, sim_xmax, vane_dist, vane_rad):
+
+        refinement_array = np.linspace(0, 2*sim_xmax, NX)
+        vane_top_edge = sim_xmax - vane_dist - (vane_rad)
+        tvane_bottom_edge = vane_top_edge + (2*vane_rad)
+
+        vane_top2_edge = sim_xmax + vane_dist - vane_rad
+        bvane_bottom_edge = sim_xmax + vane_dist + vane_rad
+
+        # Finding the place where the mesh around the north vane ends. Finds which refinement box it
+        # lands between, then increases its size by one course box worth
+        ymax_north_idx = bisect.bisect_left(refinement_array, tvane_bottom_edge)
+        ymax_north = refinement_array[ymax_north_idx]
+
+        if (ymax_north < 2*sim_xmax):
+            ymax_north += (2*sim_xmax)/(NX-1)
+
+        # Similarly for the mesh around the southern vane
+        ymax_south = refinement_array[bisect.bisect_left(refinement_array, bvane_bottom_edge)]
+        if (ymax_south < 2*sim_xmax):
+            ymax_south += (2*sim_xmax)/(NX-1)
+
+        ymin_north_idx = bisect.bisect_left(refinement_array, vane_top_edge)
+        if (ymin_north_idx > 0):
+            ymin_north_idx -= 1
+        if (ymin_north_idx > 0):
+            ymin_north_idx -= 1
+        ymin_north = refinement_array[ymin_north_idx]
+
+        ymin_south_idx = bisect.bisect_left(refinement_array, vane_top2_edge)
+        if (ymin_south_idx > 0):
+            ymin_south_idx -= 1
+        if (ymin_south_idx > 0):
+            ymin_south_idx -= 1
+        ymin_south = refinement_array[ymin_south_idx]
+        xmax_east = ymax_south
+        xmin_east = ymin_south
+        xmax_west = ymax_north
+        xmin_west = ymin_north
+
+        # Similar process for mesh boundaries across central axis
+        vertical_xmax = refinement_array[bisect.bisect_left(refinement_array, sim_xmax + vane_rad)]
+        if (vertical_xmax < 2*sim_xmax):
+            vertical_xmax += (2*sim_xmax)/(NX-1)
+        vertical_xmin_idx = bisect.bisect_left(refinement_array, sim_xmax - vane_rad)
+        if (vertical_xmin_idx > 0):
+            vertical_xmin_idx -= 1
+        if (vertical_xmin_idx > 0):
+            vertical_xmin_idx -= 1
+        vertical_xmin = refinement_array[vertical_xmin_idx]
+        print("position: {}".format(sim_xmax-vane_rad))
+        print(refinement_array)
+        print("vertical xmins  {} ".format(vertical_xmin))
+
+        lateral_ymin = vertical_xmin
+        lateral_ymax = vertical_xmax
+
+        xmax_east -= sim_xmax
+        ymax_south -= sim_xmax
+        xmin_east -= sim_xmax
+        ymin_south -= sim_xmax
+        xmax_west -= sim_xmax
+        ymax_north -= sim_xmax
+        xmin_west -= sim_xmax
+        ymin_north -= sim_xmax
+
+        lateral_ymin -= sim_xmax
+        lateral_ymax -= sim_xmax
+        vertical_xmin -= sim_xmax
+        vertical_xmax -= sim_xmax
+
+        boundaries = {
+            "northmins": [vertical_xmin, ymin_north, sim_start],
+            "northmaxs": [vertical_xmax, ymax_north, sim_end],
+            "southmins": [vertical_xmin, ymin_south, sim_start],
+            "southmaxs": [vertical_xmax, ymax_south, sim_end],
+            "westmins":  [xmin_west, lateral_ymin, sim_start],
+            "westmaxs":  [xmax_west, lateral_ymax, sim_end],
+            "eastmins":  [xmin_east, lateral_ymin, sim_start],
+            "eastmaxs":  [xmax_east, lateral_ymax, sim_end]
+        }
+
+        return boundaries
