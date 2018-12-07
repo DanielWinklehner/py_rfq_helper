@@ -112,6 +112,11 @@ venv.bak/
 *.dump
 *~
 *.mp4
+*.brep
+*.stl
 
 # the pycharm settings folder
-/.idea
+.idea/
+
+# the test output folder with vanes
+old_scripts/py_rfq_designer/py_rfq_desiger/temp/
