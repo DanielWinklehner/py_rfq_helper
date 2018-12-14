@@ -12,8 +12,8 @@ import pprint
 # FILENAME  = "input/fieldoutput.txt"
 FILENAME  = "input/fieldw015width.dat"
 
-VANE_RAD  = 0.3 * cm
-VANE_DIST = 1.5 * cm
+VANE_RAD  = 1 * cm
+VANE_DIST = 2.5 * cm
 # VANE_DIST = 2.5 * cm
 
 NX     = 16
@@ -162,29 +162,28 @@ utils = PyRfqUtils(rfq, beam)
 
 boundaries = utils.find_vane_mesh_boundaries(NX, SIM_START, w3d.zmmax, -PRWALL, PRWALL, VANE_DIST, VANE_RAD)
 
-pprint.pprint(boundaries)
 
 northvane_mesh = refinedsolver.addchild(mins=boundaries["northmins"],
 								  		maxs=boundaries["northmaxs"],
-								  		refinement=[2,2,2])
+								  		refinement=[4,4,4])
 
 southvane_mesh = refinedsolver.addchild(mins=boundaries["southmins"],
 										maxs=boundaries["southmaxs"],
-										refinement=[2,2,2])
+										refinement=[4,4,4])
 
 westvane_mesh  = refinedsolver.addchild(mins=boundaries["westmins"],
 										maxs=boundaries["westmaxs"],
-										refinement=[2,2,2])
+										refinement=[4,4,4])
 
 eastvane_mesh  = refinedsolver.addchild(mins=boundaries["eastmins"],
 										maxs=boundaries["eastmaxs"],
-										refinement=[2,2,2])
+										refinement=[4,4,4])
 
 
 # Mesh refinement for the center of the beam
 childmesh = refinedsolver.addchild(mins=[-VANE_DIST+VANE_RAD, -VANE_DIST+VANE_RAD, SIM_START], 
                              	   maxs=[ VANE_DIST-VANE_RAD,  VANE_DIST-VANE_RAD, w3d.zmmax],
-                             	   refinement=[2,2,2])
+                             	   refinement=[4,4,4])
 
 
 
@@ -220,7 +219,6 @@ part_x = beam.getx()
 part_y = beam.gety()
 part_z = beam.getz()
 
-print(len(part_x))
 
 i = 0
 while os.path.exists("particle.%s.dump" % i):

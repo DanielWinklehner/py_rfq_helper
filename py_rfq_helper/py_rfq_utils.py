@@ -303,9 +303,6 @@ class PyRfqUtils(object):
         if (vertical_xmin_idx > 0):
             vertical_xmin_idx -= 1
         vertical_xmin = refinement_array[vertical_xmin_idx]
-        print("position: {}".format(sim_xmax-vane_rad))
-        print(refinement_array)
-        print("vertical xmins  {} ".format(vertical_xmin))
 
         lateral_ymin = vertical_xmin
         lateral_ymax = vertical_xmax
