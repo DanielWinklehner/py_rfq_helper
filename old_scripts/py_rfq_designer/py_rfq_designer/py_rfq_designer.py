@@ -3,6 +3,8 @@ import numpy.ma as ma
 import scipy.constants as const
 from multiprocessing import Pool
 from scipy.interpolate import interp1d
+from dans_pymodules import Vector2D
+import matplotlib.pyplot as plt
 # from scipy import meshgrid
 from scipy.special import iv as bessel1
 from scipy.optimize import root
@@ -19,6 +21,7 @@ import os
 import sys
 import shutil
 from py_electrodes import ElectrodeObject
+from matplotlib.patches import Arc as Arc
 
 # Check if we can connect to a display, if not disable all plotting and windowed stuff (like gmsh)
 # TODO: This does not remotely cover all cases!
@@ -119,6 +122,242 @@ rot_map = {"yp": 0.0,
            "xm": 90.0}
 
 
+class Polygon2D(object):
+    """
+    Simple class to handle polygon operations such as point in polygon or
+    orientation of rotation (cw or ccw), area, etc.
+    """
+
+    def add_point(self, p=None):
+        """
+        Append a point to the polygon
+        """
+
+        if p is not None:
+
+            if isinstance(p, tuple) and len(p) == 2:
+
+                self.poly.append(p)
+
+            else:
+                print
+                "Error in add_point of Polygon: p is not a 2-tuple!"
+
+        else:
+            print
+            "Error in add_point of Polygon: No p given!"
+
+        return 0
+
+    def add_polygon(self, poly=None):
+        """
+        Append a polygon object to the end of this polygon
+        """
+
+        if poly is not None:
+
+            if isinstance(poly, Polygon2D):
+
+                self.poly.extend(poly.poly)
+            # if isinstance(poly.poly, list) and len(poly.poly) > 0:
+            #
+            #     if isinstance(poly.poly[0], tuple) and len(poly.poly[0]) == 2:
+            #         self.poly.extend(poly.poly)
+
+        return 0
+
+    def area(self):
+        """
+        Calculates the area of the polygon. only works if there are no crossings
+
+        Taken from http://paulbourke.net, algorithm written by Paul Bourke, 1998
+
+        If area is positive -> polygon is given clockwise
+        If area is negative -> polygon is given counter clockwise
+        """
+
+        area = 0
+        poly = self.poly;
+        npts = len(poly)
+        j = npts - 1
+        i = 0
+
+        for _ in poly:
+            p1 = poly[i]
+            p2 = poly[j]
+            area += (p1[0] * p2[1])
+            area -= p1[1] * p2[0]
+            j = i
+            i += 1
+
+        area /= 2
+
+        return area
+
+    def centroid(self):
+        """
+        Calculate the centroid of the polygon
+
+        Taken from http://paulbourke.net, algorithm written by Paul Bourke, 1998
+        """
+        poly = self.poly
+        npts = len(poly)
+        x = 0
+        y = 0
+        j = npts - 1
+        i = 0
+
+        for _ in poly:
+            p1 = poly[i]
+            p2 = poly[j]
+            f = p1[0] * p2[1] - p2[0] * p1[1]
+            x += (p1[0] + p2[0]) * f
+            y += (p1[1] + p2[1]) * f
+            j = i
+            i += 1
+
+        f = self.area() * 6
+
+        return x / f, y / f
+
+    def clockwise(self):
+        """
+        Returns True if the polygon points are ordered clockwise
+
+        If area is positive -> polygon is given clockwise
+        If area is negative -> polygon is given counter clockwise
+        """
+
+        if self.area() > 0:
+            return True
+        else:
+            return False
+
+    def closed(self):
+        """
+        Checks whether the polygon is closed (i.e first point == last point)
+        """
+
+        if self.poly[0] == self.poly[-1]:
+
+            return True
+
+        else:
+
+            return False
+
+    def nvertices(self):
+        """
+        Returns the number of vertices in the polygon
+        """
+
+        return len(self.poly)
+
+    def point_in_poly(self, p=None):
+        """
+        Check if a point p (tuple of x,y) is inside the polygon
+        This is called the "ray casting method": If a ray cast from p crosses
+        the polygon an even number of times, it's outside, otherwise inside
+
+        From: http://www.ariel.com.au/a/python-point-int-poly.html
+
+        Note:   Points directly on the edge or identical with a vertex are not
+                        considered "inside" the polygon!
+        """
+
+        if p is None: return None
+
+        poly = self.poly
+        x = p[0]
+        y = p[1]
+        n = len(poly)
+        inside = False
+
+        p1x, p1y = poly[0]
+
+        for i in range(n + 1):
+
+            p2x, p2y = poly[i % n]
+
+            if y > min(p1y, p2y):
+
+                if y <= max(p1y, p2y):
+
+                    if x <= max(p1x, p2x):
+
+                        if p1y != p2y:
+                            xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
+
+                        if p1x == p2x or x <= xinters:
+                            inside = not inside
+
+            p1x, p1y = p2x, p2y
+
+        return inside
+
+    def remove_last(self):
+        """
+        Remove the last tuple in the ploygon
+        """
+
+        self.poly.pop(-1)
+
+        return 0
+
+    def reverse(self):
+        """
+        Reverses the ordering of the polygon (from cw to ccw or vice versa)
+        """
+
+        temp_poly = []
+        nv = self.nvertices()
+
+        for i in range(self.nvertices() - 1, -1, -1):
+            temp_poly.append(self.poly[i])
+
+        self.poly = temp_poly
+
+        return temp_poly
+
+    def rotate(self, index):
+        """
+        rotates the polygon, so that the point with index 'index' before now has
+        index 0
+        """
+
+        if index > self.nvertices() - 1: return 1
+
+        for i in range(index):
+            self.poly.append(self.poly.pop(0))
+
+        return 0
+
+    def __init__(self, poly=None):
+        """
+        construct a polygon object
+        If poly is not specified, an empty polygon is created
+        if poly is specified, it has to be a list of 2-tuples!
+        """
+        self.poly = []
+
+        if poly is not None:
+
+            if isinstance(poly, list) and len(poly) > 0:
+
+                if isinstance(poly[0], tuple) and len(poly[0]) == 2:
+
+                    self.poly = poly
+
+    def __getitem__(self, index):
+
+        return self.poly[index]
+
+    def __setitem__(self, index, value):
+
+        if isinstance(value, tuple) and len(value) == 2:
+            self.poly[index] = value
+
+
 class PyRFQCell(object):
     def __init__(self,
                  cell_type,
@@ -127,10 +366,12 @@ class PyRFQCell(object):
                  length,
                  flip_z,
                  shift_cell_no,
+                 fillet_radius=None,
                  prev_cell=None,
                  next_cell=None):
 
-        assert cell_type in ["STA", "RMS", "NCS", "TCS", "DCS"], "cell_type must be one of RMS, NCS, TCS, DCS!"
+        assert cell_type in ["STA", "RMS", "NCS", "TCS", "DCS", "TRC"], \
+            "cell_type must be one of STA, RMS, NCS, TCS, DCS, TRC!"
 
         self._type = cell_type
         self._aperture = np.round(aperture, decimals)
@@ -138,6 +379,7 @@ class PyRFQCell(object):
         self._length = np.round(length, decimals)
         self._flip_z = flip_z
         self._shift_cell_no = shift_cell_no
+        self._fillet_radius = fillet_radius
         self._profile_itp = None  # Interpolation of the cell profile
         self._prev_cell = prev_cell
         self._next_cell = next_cell
@@ -213,12 +455,160 @@ class PyRFQCell(object):
         assert isinstance(next_cell, PyRFQCell), "You are trying to set a PyRFQCell with a non-cell object!"
         self._next_cell = next_cell
 
+    def calculate_profile_trc(self):
+        # TODO: This is a rough test of a trapezoidal cell: _/-\_
+        # TODO: tilted parts are as long as roof and start and end (cell_length/5)
+        fillet_radius = self._fillet_radius  # m
+
+        def intersection(_p1, _v1, _p2, _v2):
+            s = (_v2[1] * (_p2[0] - _p1[0]) + _v2[0] * (_p1[1] - _p2[1])) / (_v1[0] * _v2[1] - _v1[1] * _v2[0])
+            return _p1 + s * _v1
+
+        def arc_to_poly(z1, r1, z2, r2, r_curv, invert):
+            """
+            transform an arc into a polygon
+            res is the resolution in mm/gu, if no resolution is passed,
+            half of the IGUN entry is used (double resolution for arcs compared to
+            the rest of the geometry)
+            """
+            polygon = Polygon2D()
+
+            cur = 1
+            if invert:
+                cur = -1
+
+            dp = np.sqrt((z2 - z1) ** 2 + (r2 - r1) ** 2)
+
+            if r_curv < 0.5 * dp:
+                return None
+
+            dx = np.sqrt(abs((0.5 * dp) ** 2.0 - r_curv ** 2.0))
+            zc = (z1 + z2) * 0.5 - cur * dx * (r1 - r2) / dp
+            rc = (r1 + r2) * 0.5 + cur * dx * (z1 - z2) / dp
+
+            if round(z1 - zc, 8) == 0:
+                if r1 > rc:
+                    p1 = 90
+                else:
+                    p1 = 270
+            else:
+                p1 = np.arctan((r1 - rc) / (z1 - zc)) / np.pi * 180.0
+                if z1 < zc:
+                    p1 += 180
+            if p1 < 0:
+                p1 += 360
+
+            if round(z2 - zc, 8) == 0:
+                if r2 > rc:
+                    p2 = 90
+                else:
+                    p2 = 270
+            else:
+                p2 = np.arctan((r2 - rc) / (z2 - zc)) / np.pi * 180.0
+                if z2 < zc:
+                    p2 += 180
+            if p2 < 0:
+                p2 += 360
+
+            diff = p2 - p1
+            if diff < 0:
+                diff += 360
+            if diff > 180:
+                p3 = p1
+                p1 = p2
+                p2 = p3
+
+            num_vert = 10  # No need for too many, just spline guide points
+
+            if p2 < p1:
+                dp = float((p2 + 360.0 - p1) / (float(num_vert) - 1.0))
+
+            else:
+                dp = float((p2 - p1) / (float(num_vert) - 1.0))
+
+            for j in range(num_vert):
+                phi = np.deg2rad(p1 + dp * j)
+                z_temp = zc + (r_curv * np.cos(phi))
+                r_temp = rc + (r_curv * np.sin(phi))
+                polygon.add_point((z_temp, r_temp))
+
+            if not invert:
+                polygon.reverse()
+
+            return polygon, p1, p2
+
+        # 6 vertices for 5 segments of the trapezoidal cell
+        _z = np.linspace(0, self._length, 6, endpoint=True)
+        _r = np.array([self._aperture,
+                       self._aperture,
+                       self._aperture * self._modulation,
+                       self._aperture * self._modulation,
+                       self._aperture,
+                       self._aperture
+                       ])
+
+        # Now we replace the inner vertices with fillets
+        _vertices = np.array(list(zip(_z, _r)))
+        _new_verts = Polygon2D([tuple(_vertices[0])])
+
+        for i in range(4):
+
+            temp_poly = Polygon2D([tuple(_vertices[0+i]), tuple(_vertices[1+i]), tuple(_vertices[i+2])])
+            clockwise = temp_poly.clockwise()
+
+            # Calculate maximum radius for fillet
+            _v1 = Vector2D(p0=_vertices[i+1], p1=_vertices[i+0])
+            _v2 = Vector2D(p0=_vertices[i+1], p1=_vertices[i+2])
+
+            if clockwise:
+                p_in_line1 = Vector2D(_vertices[i+1]) + _v1.rotate_ccw().normalize() * fillet_radius  # belongs to v1
+                p_in_line2 = Vector2D(_vertices[i+1]) + _v2.rotate_cw().normalize() * fillet_radius  # belongs to v2
+            else:
+                p_in_line1 = Vector2D(_vertices[i+1]) + _v1.rotate_cw().normalize() * fillet_radius  # belongs to v1
+                p_in_line2 = Vector2D(_vertices[i+1]) + _v2.rotate_ccw().normalize() * fillet_radius  # belongs to v2
+
+            m_center = intersection(p_in_line1, _v1, p_in_line2, _v2)
+            v_new1 = intersection(Vector2D(_vertices[i+1]), _v1.normalize(), m_center, _v1.rotate_cw().normalize())
+            v_new2 = intersection(Vector2D(_vertices[i+1]), _v2.normalize(), m_center, _v2.rotate_cw().normalize())
+
+            arcpoly, ps, pe = arc_to_poly(v_new1[0], v_new1[1],
+                                          v_new2[0], v_new2[1],
+                                          fillet_radius,
+                                          not clockwise)
+
+            # _new_verts.add_point((v_new1[0], v_new1[1]))
+            _new_verts.add_polygon(arcpoly)
+            # _new_verts.add_point((v_new2[0], v_new2[1]))
+
+            # ax.add_artist(Arc((m_center[0], m_center[1]),
+            #               2.0 * fillet_radius, 2.0 * fillet_radius, 0.0,
+            #               ps, pe,
+            #               color='red'))
+
+        _new_verts.add_point(tuple(_vertices[-1]))
+        _new_verts = np.array(_new_verts[:])
+
+        # if RANK == 1:
+        #     plt.scatter(_vertices[:, 0], _vertices[:, 1], c="blue")
+        #     plt.plot(_new_verts[:, 0], _new_verts[:, 1], c="red")
+        #     ax.set_aspect("equal")
+        #     plt.show()
+
+        self._profile_itp = interp1d(_new_verts[:, 0], _new_verts[:, 1])
+
+        return 0
+
     def calculate_profile(self, cell_no, vane_type, fudge=False):
         print("cell_no: " + str(cell_no))
         assert vane_type in ["xp", "xm", "yp", "ym"], "Did not understand vane type {}".format(vane_type)
 
         if self._type == "STA":
             # Don't do anything for start cell
+            return 0
+
+        elif self._type == "TRC":
+            assert self._prev_cell.cell_type == "DCS", "Rebunching cell must follow a drift cell (DCS)!"
+            self.calculate_profile_trc()
             return 0
 
         elif self._type == "DCS":
@@ -431,7 +821,8 @@ class PyRFQVane(object):
         self._elec = None
         self._length = np.sum([cell.length for cell in self._cells])  # type: float
 
-        self._mesh_params = {"dx": 0.01,  # step length along z (m)
+        self._mesh_params = {"dx": 0.001,  # step length along z (m)
+                             "nz": 100,  # Number of steps along z, consolidate with dx!
                              "h": 0.005,  # gmsh meshing parameter (m)
                              "tip": "semi-circle",
                              "r_tip": 0.005,  # Radius of curvature of vane tip (m)
@@ -563,11 +954,16 @@ class PyRFQVane(object):
 
         # Consistency check for absolute h_type
         if h_type == 'absolute':
+
             if h_block <= profile.max():
+
                 print("Error during geo string generation: h_type is 'absolute', "
-                      "but vane modulation extends past specified height.")
+                      "but vane modulation (max = {} m) extends past specified height ({} m).".format(profile.max(),
+                                                                                                      h_block))
                 return 1
+
             elif h_block <= profile.max() + 0.001:
+
                 print("Warning during geo string generation: vane modulation and "
                       "specified height will lead to very thin section which might lead to meshing errors.")
 
@@ -894,17 +1290,25 @@ EndFor
             reverse_mesh = self._mesh_params["reverse_mesh"]
 
         # Calculate z_data and vane profile:
-        nz = int(np.round(self._length / dx, 0) + 1)  # Number of points to use
+        nz = self._mesh_params["nz"]
+        # nz = int(np.round(self._length / dx, 0) + 1)  # Number of points to use
         z, profile = self.get_profile(nz=nz)
+
         extra = profile.max() - profile.min() + 0.001
 
         # Consistency check for absolute h_type
         if h_type == 'absolute':
+
             if h_block <= profile.max() + r_tip:
+
                 print("Error during geo string generation: h_type is 'absolute', "
-                      "but vane modulation extends past specified height.")
+                      "but vane modulation (max = {} m) extends past "
+                      "specified height ({} m). Did you include the tip radius?".format(profile.max() + r_tip,
+                                                                                        h_block))
                 return 1
+
             elif h_block <= profile.max() + r_tip + 0.001:
+
                 print("Warning during geo string generation: vane modulation and "
                       "specified height will lead to very thin section which might lead to meshing errors.")
 
@@ -1302,7 +1706,7 @@ class PyRFQ(object):
                                  "vane_radius": 0.005,  # m
                                  "vane_height": 0.05,  # m
                                  "vane_height_type": 'absolute',
-                                 "nz": 500  # number ofpoints to use for modulation spline along z
+                                 "nz": 500  # number of points to use for modulation spline along z
                                  # TODO: nz is confusing, now we have dx, numz and nz that could all determine
                                  # TODO: the step length along axis for geometry purposes! -DW
                                  }
@@ -1434,21 +1838,28 @@ class PyRFQ(object):
                     aperture,
                     modulation,
                     length,
+                    fillet_radius=None,
                     flip_z=False,
                     shift_cell_no=False):
 
-        assert cell_type in ["STA", "RMS", "NCS", "TCS", "DCS"], "cell_type must be one of STA, RMS, NCS, TCS, DCS!"
+        assert cell_type in ["STA", "RMS", "NCS", "TCS", "DCS", "TRC"], \
+            "cell_type must be one of STA, RMS, NCS, TCS, DCS, TRC!"
 
         if len(self._cells) > 0:
             pc = self._cells[-1]
         else:
             pc = None
 
+        if cell_type == "TRC" and fillet_radius is None:
+            print("For 'TRC' cell a fillet radius must be given!")
+            exit()
+
         self._cells.append(PyRFQCell(cell_type=cell_type,
                                      aperture=aperture,
                                      modulation=modulation,
                                      length=length,
                                      flip_z=flip_z,
+                                     fillet_radius=fillet_radius,
                                      shift_cell_no=shift_cell_no,
                                      prev_cell=pc,
                                      next_cell=None))
@@ -2116,6 +2527,7 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
             _vane.set_mesh_parameter("h_block", self.get_geometry_parameter("vane_height"))
             _vane.set_mesh_parameter("refine_steps", self.get_bempp_parameter("refine_steps"))
             _vane.set_mesh_parameter("reverse_mesh", self.get_bempp_parameter("reverse_mesh"))
+            _vane.set_mesh_parameter("nz", self.get_geometry_parameter("nz"))
 
         # Generate the two vanes in parallel:
         if MPI is None or SIZE == 1:
@@ -2152,6 +2564,7 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
         h = self._variables_bempp["grid_res"]
         dx = h  # TODO: This needs to become user parameter and consolidated with other params.
 
+
         if RANK == 0:
             print("Copying vanes and regenerating geo string.")
             sys.stdout.flush()
@@ -2162,7 +2575,7 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
             new_vane.generate_geo_str(dx=dx, h=h,
                                       symmetry=False, mirror=False)
             self._vanes.append(new_vane)
-
+        return 0
         COMM.barrier()
         if RANK == 0:
             print("Generating openCascade model of the vanes.")
@@ -2238,8 +2651,8 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
             COMM.barrier()
 
         # Unfortunately, multiprocessing/MPI can't handle SwigPyObject objects
-        for _vane in self._vanes:
-            _vane.generate_occ(npart=npart)
+        # for _vane in self._vanes:
+        #     _vane.generate_occ(npart=npart)
 
         return 0
 
@@ -2459,7 +2872,10 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
     
     ' Create the sweep feature.
     Dim oSweep As SweepFeature
-    Set oSweep = oCompDef.Features.SweepFeatures.AddUsingPath(oProfile, oPath, kJoinOperation)
+    ' Note: I am not sure if keeping the profile perpendicular to the path is more accurate, 
+    ' but unfortunately for trapezoidal cells (small fillets) it doesn't work
+    ' so it has to be a 'parallel to original profile' kinda sweep
+    Set oSweep = oCompDef.Features.SweepFeatures.AddUsingPath(oProfile, oPath, kJoinOperation, kParallelToOriginalProfile)
 """
 
             # Small modification depending on absolute or relative vane height:
@@ -2532,7 +2948,7 @@ End Sub
                             z_end = np.max(z)
 
                     for _x, _z in zip(x, z):
-                        outfile.write("{:.6f}, {:.6f}, {:.6f}\n".format(
+                        outfile.write("{:.6f}, {:.6f}, {:.6f}\r\n".format(
                             _x * 100.0,  # For some weird reason Inventor uses cm as default...
                             0.0,
                             _z * 100.0))
@@ -2545,40 +2961,41 @@ End Sub
                             max_y = np.max(y)
 
                     for _y, _z in zip(y, z):
-                        outfile.write("{:.6f}, {:.6f}, {:.6f}\n".format(
+                        outfile.write("{:.6f}, {:.6f}, {:.6f}\r\n".format(
                             0.0,
                             _y * 100.0,  # For some weird reason Inventor uses cm as default...
                             _z * 100.0))
 
-            # Write an info file with some useful information:
-            with open(os.path.join(save_folder, "Info.txt"), "w") as outfile:
+        # Write an info file with some useful information:
+        with open(os.path.join(save_folder, "Info.txt"), "w") as outfile:
 
-                datestr = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                outfile.write("Inventor Macros and Profile generated on {}\n\n".format(datestr))
+            datestr = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            outfile.write("Inventor Macros and Profile generated on {}\n\n".format(datestr))
 
-                outfile.write("Parameters:\n")
-                for key, value in self._variables_gmtry.items():
-                    outfile.write("{}: {}\n".format(key, value))
+            outfile.write("Parameters:\n")
+            for key, value in self._variables_gmtry.items():
+                outfile.write("{}: {}\n".format(key, value))
 
-                if self._variables_gmtry["vane_height_type"] == 'absolute':
-                    max_extent_x = max_extent_y = self._variables_gmtry["vane_height"]
-                else:
-                    max_extent_x = self._variables_gmtry["vane_height"] + min_x
-                    max_extent_y = self._variables_gmtry["vane_height"] + min_y
+            if self._variables_gmtry["vane_height_type"] == 'absolute':
+                max_extent_x = max_extent_y = self._variables_gmtry["vane_height"]
+            else:
+                max_extent_x = self._variables_gmtry["vane_height"] + min_x
+                max_extent_y = self._variables_gmtry["vane_height"] + min_y
 
-                outfile.write("\nOther useful values:\n")
-                outfile.write("Maximum Extent in X: {} m\n".format(max_extent_x))
-                outfile.write("Maximum Extent in Y: {} m\n".format(max_extent_y))
-                outfile.write("Z Start: {} m\n".format(z_start))
-                outfile.write("Z End: {} m\n".format(z_end))
+            outfile.write("\nOther useful values:\n")
+            outfile.write("Maximum Extent in X: {} m\n".format(max_extent_x))
+            outfile.write("Maximum Extent in Y: {} m\n".format(max_extent_y))
+            outfile.write("Z Start: {} m\n".format(z_start))
+            outfile.write("Z End: {} m\n".format(z_end))
 
         return 0
 
 
 if __name__ == "__main__":
 
-    myfn = "PARMTEQOUT_14Cells.TXT"
-    # myfn = "PARMTEQOUT.TXT"
+    # myfn = "PARMTEQOUT_14Cells.TXT"
+    """
+    myfn = "PARMTEQOUT.TXT"
 
     myrfq = PyRFQ(voltage=22000.0, debug=True)
 
@@ -2594,16 +3011,54 @@ if __name__ == "__main__":
     if myrfq.add_cells_from_file(filename=myfn, ignore_rms=True) != 0:
         exit()
 
-    # - These are for loading the full pramteq file (not needed for the 14 cell test file) - #
-    # myrfq.append_cell(cell_type="TCS",
-    #                   aperture=0.006837,
-    #                   modulation=1.6778,
-    #                   length=0.032727)
-    #
-    # myrfq.append_cell(cell_type="DCS",
-    #                   aperture=0.0091540593,
+    # - These are for loading the full parmteq file (not needed for the 14 cell test file) - #
+    myrfq.append_cell(cell_type="TCS",
+                      aperture=0.006837,
+                      modulation=1.6778,
+                      length=0.032727)
+   
+    myrfq.append_cell(cell_type="DCS",
+                      aperture=0.0091540593,
+                      modulation=1.0,
+                      length=0.14)
+    # --- For testing, we create an RFQ 'from scratch' that just --- #
+    # --- has a start cell, a drift and a trapezoidal cell       --- #
+    myrfq = PyRFQ(voltage=22000.0, debug=True)
+
+    # Start Cell
+    myrfq.append_cell(cell_type="STA",
+                      aperture=0.01,
+                      modulation=1.0,
+                      length=0.0)
+
+    # Drift Cell
+    myrfq.append_cell(cell_type="DCS",
+                      aperture=0.01,
+                      modulation=1.0,
+                      length=0.05)
+
+    # Trapezoidal Rebunching Cell
+    myrfq.append_cell(cell_type="TRC",
+                      aperture=0.01,
+                      modulation=2.0,
+                      length=0.1,
+                      fillet_radius=0.025)
+    """
+
+    # --- Jungbae's RFQ Design with RMS section
+    myrfq = PyRFQ(voltage=22000.0, debug=True)
+
+    # myrfq.append_cell(cell_type="STA",
+    #                   aperture=0.009709,
     #                   modulation=1.0,
-    #                   length=0.14)
+    #                   length=0.0)
+
+    # Load the base RFQ design from the parmteq file
+    myfn = "PARMTEQOUT_mod.TXT"
+    if myrfq.add_cells_from_file(filename=myfn, ignore_rms=False) != 0:
+        exit()
+
+    print(myrfq)
 
     # TODO: Idea: Make ElectrodeObject class from which other electrodes inherit?
     # TODO: Idea: Make ElectrostaticSolver class that can be reused (e.g. for Spiral Inflector)?
@@ -2614,8 +3069,12 @@ if __name__ == "__main__":
     myrfq.set_bempp_parameter("refine_steps", 0)  # number of times gmsh is called to "refine by splitting"
 
     myrfq.set_geometry_parameter("vane_radius", 0.0093)
-    myrfq.set_geometry_parameter("vane_height", 0.03)
+    myrfq.set_geometry_parameter("vane_height", 0.165)
     myrfq.set_geometry_parameter("vane_height_type", 'absolute')
+
+    # Steps along z for spline interpolation of vane profile
+    # Cave: Needs to be fairly high-res to resolve trapezoidal cells
+    myrfq.set_geometry_parameter("nz", 500)
 
     if RANK == 0:
         print("Generating vanes")
@@ -2624,13 +3083,15 @@ if __name__ == "__main__":
     if RANK == 0:
         print("Generating vanes took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
-    # if RANK == 0:
-    #     myrfq.plot_vane_profile()
-    #     myrfq.write_inventor_macro(vane_type='vane',
-    #                                vane_radius=0.0093,
-    #                                vane_height=0.03,
-    #                                vane_height_type='absolute',
-    #                                nz=600)
+    if RANK == 0:
+        myrfq.plot_vane_profile()
+        myrfq.write_inventor_macro(vane_type='vane',
+                                   vane_radius=0.0093,
+                                   vane_height=0.165,
+                                   vane_height_type='absolute',
+                                   nz=500)
+
+    exit()
 
     if RANK == 0:
         print("Loading and assembling full mesh for BEMPP")
@@ -2638,7 +3099,8 @@ if __name__ == "__main__":
     myrfq.generate_full_mesh()
     if RANK == 0:
         print("Assembling mesh took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
-
+    exit()
+        
     # input("Hit enter to continue...")
     if RANK == 0:
         print("Solving BEMPP problem")
