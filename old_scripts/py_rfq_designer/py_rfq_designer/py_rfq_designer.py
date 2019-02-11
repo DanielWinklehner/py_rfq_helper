@@ -79,11 +79,14 @@ try:
     from OCC.Core.Geom2dAPI import Geom2dAPI_Interpolate, Geom2dAPI_PointsToBSpline
     from OCC.Core.TColgp import TColgp_HArray1OfPnt2d, TColgp_Array1OfPnt2d
     from OCCUtils.Common import *
+
     HAVE_OCC = True
+
 except ImportError:
     print("Something went wrong during OCC import. No CAD support possible!")
 
 USE_MULTIPROC = True  # In case we are not using mpi or only using 1 processor, fall back on multiprocessing
+NO_MESH = False  # Debug flag for omitting the gmsh/BEMPP mesh generation
 # GMSH_EXE = "C:\gmsh3\gmsh.exe"  # TODO: For now use gmsh 3.0, because new 4.0 handles surface normals differently
 GMSH_EXE = "gmsh"
 HAVE_TEMP_FOLDER = False
@@ -157,7 +160,6 @@ class Polygon2D(object):
         if poly is not None:
 
             if isinstance(poly, Polygon2D):
-
                 self.poly.extend(poly.poly)
             # if isinstance(poly.poly, list) and len(poly.poly) > 0:
             #
@@ -325,7 +327,8 @@ class Polygon2D(object):
         index 0
         """
 
-        if index > self.nvertices() - 1: return 1
+        if index > self.nvertices() - 1:
+            return 1
 
         for i in range(index):
             self.poly.append(self.poly.pop(0))
@@ -345,7 +348,6 @@ class Polygon2D(object):
             if isinstance(poly, list) and len(poly) > 0:
 
                 if isinstance(poly[0], tuple) and len(poly[0]) == 2:
-
                     self.poly = poly
 
     def __getitem__(self, index):
@@ -368,11 +370,13 @@ class PyRFQCell(object):
                  shift_cell_no,
                  fillet_radius=None,
                  prev_cell=None,
-                 next_cell=None):
+                 next_cell=None,
+                 debug=False):
 
         assert cell_type in ["STA", "RMS", "NCS", "TCS", "DCS", "TRC"], \
             "cell_type must be one of STA, RMS, NCS, TCS, DCS, TRC!"
 
+        self._debug = debug
         self._type = cell_type
         self._aperture = np.round(aperture, decimals)
         self._modulation = np.round(modulation, decimals)
@@ -455,7 +459,7 @@ class PyRFQCell(object):
         assert isinstance(next_cell, PyRFQCell), "You are trying to set a PyRFQCell with a non-cell object!"
         self._next_cell = next_cell
 
-    def calculate_profile_trc(self):
+    def calculate_profile_trc(self, vane_type):
         # TODO: This is a rough test of a trapezoidal cell: _/-\_
         # TODO: tilted parts are as long as roof and start and end (cell_length/5)
         fillet_radius = self._fillet_radius  # m
@@ -467,9 +471,6 @@ class PyRFQCell(object):
         def arc_to_poly(z1, r1, z2, r2, r_curv, invert):
             """
             transform an arc into a polygon
-            res is the resolution in mm/gu, if no resolution is passed,
-            half of the IGUN entry is used (double resolution for arcs compared to
-            the rest of the geometry)
             """
             polygon = Polygon2D()
 
@@ -537,15 +538,28 @@ class PyRFQCell(object):
 
             return polygon, p1, p2
 
+        # Flip for y vane
+        flip_r = ("y" in vane_type) ^ self._shift_cell_no
+
         # 6 vertices for 5 segments of the trapezoidal cell
         _z = np.linspace(0, self._length, 6, endpoint=True)
-        _r = np.array([self._aperture,
-                       self._aperture,
-                       self._aperture * self._modulation,
-                       self._aperture * self._modulation,
-                       self._aperture,
-                       self._aperture
-                       ])
+
+        if flip_r:
+            _r = np.array([self._aperture,
+                           self._aperture,
+                           self._aperture * (2.0 - self._modulation),
+                           self._aperture * (2.0 - self._modulation),
+                           self._aperture,
+                           self._aperture
+                           ])
+        else:
+            _r = np.array([self._aperture,
+                           self._aperture,
+                           self._aperture * self._modulation,
+                           self._aperture * self._modulation,
+                           self._aperture,
+                           self._aperture
+                           ])
 
         # Now we replace the inner vertices with fillets
         _vertices = np.array(list(zip(_z, _r)))
@@ -553,23 +567,23 @@ class PyRFQCell(object):
 
         for i in range(4):
 
-            temp_poly = Polygon2D([tuple(_vertices[0+i]), tuple(_vertices[1+i]), tuple(_vertices[i+2])])
+            temp_poly = Polygon2D([tuple(_vertices[0 + i]), tuple(_vertices[1 + i]), tuple(_vertices[i + 2])])
             clockwise = temp_poly.clockwise()
 
             # Calculate maximum radius for fillet
-            _v1 = Vector2D(p0=_vertices[i+1], p1=_vertices[i+0])
-            _v2 = Vector2D(p0=_vertices[i+1], p1=_vertices[i+2])
+            _v1 = Vector2D(p0=_vertices[i + 1], p1=_vertices[i + 0])
+            _v2 = Vector2D(p0=_vertices[i + 1], p1=_vertices[i + 2])
 
             if clockwise:
-                p_in_line1 = Vector2D(_vertices[i+1]) + _v1.rotate_ccw().normalize() * fillet_radius  # belongs to v1
-                p_in_line2 = Vector2D(_vertices[i+1]) + _v2.rotate_cw().normalize() * fillet_radius  # belongs to v2
+                p_in_line1 = Vector2D(_vertices[i + 1]) + _v1.rotate_ccw().normalize() * fillet_radius  # belongs to v1
+                p_in_line2 = Vector2D(_vertices[i + 1]) + _v2.rotate_cw().normalize() * fillet_radius  # belongs to v2
             else:
-                p_in_line1 = Vector2D(_vertices[i+1]) + _v1.rotate_cw().normalize() * fillet_radius  # belongs to v1
-                p_in_line2 = Vector2D(_vertices[i+1]) + _v2.rotate_ccw().normalize() * fillet_radius  # belongs to v2
+                p_in_line1 = Vector2D(_vertices[i + 1]) + _v1.rotate_cw().normalize() * fillet_radius  # belongs to v1
+                p_in_line2 = Vector2D(_vertices[i + 1]) + _v2.rotate_ccw().normalize() * fillet_radius  # belongs to v2
 
             m_center = intersection(p_in_line1, _v1, p_in_line2, _v2)
-            v_new1 = intersection(Vector2D(_vertices[i+1]), _v1.normalize(), m_center, _v1.rotate_cw().normalize())
-            v_new2 = intersection(Vector2D(_vertices[i+1]), _v2.normalize(), m_center, _v2.rotate_cw().normalize())
+            v_new1 = intersection(Vector2D(_vertices[i + 1]), _v1.normalize(), m_center, _v1.rotate_cw().normalize())
+            v_new2 = intersection(Vector2D(_vertices[i + 1]), _v2.normalize(), m_center, _v2.rotate_cw().normalize())
 
             arcpoly, ps, pe = arc_to_poly(v_new1[0], v_new1[1],
                                           v_new2[0], v_new2[1],
@@ -588,7 +602,8 @@ class PyRFQCell(object):
         _new_verts.add_point(tuple(_vertices[-1]))
         _new_verts = np.array(_new_verts[:])
 
-        # if RANK == 1:
+        # if RANK == 0:
+        #     fig, ax = plt.subplots()
         #     plt.scatter(_vertices[:, 0], _vertices[:, 1], c="blue")
         #     plt.plot(_new_verts[:, 0], _new_verts[:, 1], c="red")
         #     ax.set_aspect("equal")
@@ -608,7 +623,7 @@ class PyRFQCell(object):
 
         elif self._type == "TRC":
             assert self._prev_cell.cell_type == "DCS", "Rebunching cell must follow a drift cell (DCS)!"
-            self.calculate_profile_trc()
+            self.calculate_profile_trc(vane_type)
             return 0
 
         elif self._type == "DCS":
@@ -621,43 +636,84 @@ class PyRFQCell(object):
             # Find adjacent RMS cells and get their apertures
             cc = self
             pc = cc.prev_cell
-            a = [cc.aperture]
-            z = [cc.length]
+            # a = [cc.aperture]
+            # z = [cc.length]
 
-            pc_is_rms = False
-            if pc is not None:
-                pc_is_rms = (pc.cell_type in ["RMS", "STA"])
+            # Assemble RMS section:
+            rms_cells = [cc]
+            shift = 0.0
 
-            while pc_is_rms and cc.cell_type != "STA":
-
-                a = [pc.aperture] + a
-                z = [z[0] - cc.length] + z
+            while pc is not None and pc.cell_type == "RMS":
+                rms_cells = [pc] + rms_cells
+                shift += pc.length
 
                 cc = pc
-                pc = pc.prev_cell
-
-                pc_is_rms = False
-                if pc is not None:
-                    pc_is_rms = (pc.cell_type in ["RMS", "STA"])
+                pc = cc.prev_cell
 
             cc = self
             nc = cc._next_cell
 
-            if nc is not None:
-                next_is_rms = (nc.cell_type == "RMS")
+            while nc is not None and nc.cell_type == "RMS":
+                rms_cells = rms_cells + [nc]
+                cc = nc
+                nc = cc.next_cell
 
-                while next_is_rms:
+            # Check for starting cell
+            assert rms_cells[0].prev_cell is not None, "Cannot assemble RMS section without a preceding cell! " \
+                                                       "At the beginning ofthe RFQ consider using a start (STA) cell."
 
-                    a.append(nc.aperture)
-                    z.append(z[-1] + nc.length)
+            a = [0.5 * rms_cells[0].prev_cell.aperture * (1.0 + rms_cells[0].prev_cell.modulation)]
+            z = [0.0]
 
-                    nc = nc.next_cell
+            if self._debug:
+                print("RMS Section calculated for cell {}:".format(cell_no))
+                print(rms_cells[0].prev_cell)
+                for _cell in rms_cells:
+                    print(_cell)
 
-                    next_is_rms = False
-                    if nc is not None:
-                        next_is_rms = (nc.cell_type == "RMS")
+            for _cell in rms_cells:
+                a.append(_cell.aperture)
+                z.append(z[-1] + _cell.length)
 
-            self._profile_itp = interp1d(z, a, kind='cubic')
+            # pc_is_rms = False
+            #
+            # if pc is not None:
+            #     pc_is_rms = (pc.cell_type in ["RMS", "STA"])
+            #
+            # while pc_is_rms and cc.cell_type != "STA":
+            #
+            #     a = [pc.aperture] + a
+            #     z = [z[0] - cc.length] + z
+            #
+            #     cc = pc
+            #     pc = pc.prev_cell
+            #
+            #     pc_is_rms = False
+            #
+            #     if pc is not None:
+            #         pc_is_rms = (pc.cell_type in ["RMS", "STA"])
+            #
+            # cc = self
+            # nc = cc._next_cell
+            #
+            # if nc is not None:
+            #     next_is_rms = (nc.cell_type == "RMS")
+            #
+            #     while next_is_rms:
+            #
+            #         a.append(nc.aperture)
+            #         z.append(z[-1] + nc.length)
+            #
+            #         nc = nc.next_cell
+            #
+            #         next_is_rms = False
+            #         if nc is not None:
+            #             next_is_rms = (nc.cell_type == "RMS")
+
+            print(np.array(z) - shift)
+            print(a)
+
+            self._profile_itp = interp1d(np.array(z) - shift, np.array(a), kind='cubic')
 
             return 0
 
@@ -1004,7 +1060,7 @@ h = {};
         # Center center spline
         for _z, _a in zip(z, profile):
             geo_str += "Point({}) = {{ {}, {}, {}, h }};\n".format(spline1_pts[-1],
-                                                                    0.0, _a, _z)
+                                                                   0.0, _a, _z)
             spline1_pts.append(spline1_pts[-1] + 1)
 
         new_pt = spline1_pts[-1]
@@ -1025,7 +1081,7 @@ EndFor
 
         for _z, _a in zip(z, profile):
             geo_str += "Point({}) = {{ {}, {}, {}, h }};\n".format(spline2_pts[-1],
-                                                                    r_tip, _a + r_tip, _z)
+                                                                   r_tip, _a + r_tip, _z)
             spline2_pts.append(spline2_pts[-1] + 1)
 
         new_pt = spline2_pts[-1]
@@ -1077,10 +1133,10 @@ EndFor
         geo_str += "Line({}) = {{ {}, {} }};\n\n".format(top_lns[2], top_pts[3], top_pts[0])
 
         geo_str += "ll = newll; " \
-                    "Line Loop (ll) = {{{}, {}, {}, {}}}; " \
-                    "Plane Surface({}) = {{ll}};\n\n".format(-inner_lns[1] * sign, -top_lns[0] * sign,
-                                                             -top_lns[1] * sign, -top_lns[2] * sign,
-                                                             surf_count)
+                   "Line Loop (ll) = {{{}, {}, {}, {}}}; " \
+                   "Plane Surface({}) = {{ll}};\n\n".format(-inner_lns[1] * sign, -top_lns[0] * sign,
+                                                            -top_lns[1] * sign, -top_lns[2] * sign,
+                                                            surf_count)
         surf_count += 1
 
         # Outer 2 lines and outer surface
@@ -1092,10 +1148,10 @@ EndFor
         geo_str += "Line({}) = {{ {}, {} }};\n\n".format(outer_lns[1], top_pts[2], spline2_pts[0])
 
         geo_str += "ll = newll; " \
-                    "Line Loop (ll) = {{{}:{}, {}, {}, {}}}; " \
-                    "Plane Surface({}) = {{ll}};\n\n".format(-spline2_lns[0] * sign, -spline2_lns[-1] * sign,
-                                                             -outer_lns[0] * sign, top_lns[1] * sign,
-                                                             -outer_lns[1] * sign, surf_count)
+                   "Line Loop (ll) = {{{}:{}, {}, {}, {}}}; " \
+                   "Plane Surface({}) = {{ll}};\n\n".format(-spline2_lns[0] * sign, -spline2_lns[-1] * sign,
+                                                            -outer_lns[0] * sign, top_lns[1] * sign,
+                                                            -outer_lns[1] * sign, surf_count)
         surf_count += 1
 
         # Center points for arcs
@@ -1103,7 +1159,7 @@ EndFor
 
         for _z, _a in zip(z, profile):
             geo_str += "Point({}) = {{ {}, {}, {}, h }};\n".format(arc_pts[-1],
-                                                                    0.0, _a + r_tip, _z)
+                                                                   0.0, _a + r_tip, _z)
             arc_pts.append(arc_pts[-1] + 1)
 
         new_pt = arc_pts[-1]
@@ -1138,12 +1194,12 @@ EndFor
 
         geo_str += "// Front and back surface lines:\n"
         geo_str += "ll1 = newll; " \
-                    "Line Loop (ll1) = {{{}, {}, {}, {}}};\n".format(-arc_lns[0] * sign, outer_lns[1] * sign,
-                                                                     top_lns[0] * sign, -inner_lns[2] * sign)
+                   "Line Loop (ll1) = {{{}, {}, {}, {}}};\n".format(-arc_lns[0] * sign, outer_lns[1] * sign,
+                                                                    top_lns[0] * sign, -inner_lns[2] * sign)
 
         geo_str += "ll2 = newll; " \
-                    "Line Loop (ll2) = {{{}, {}, {}, {}}};\n\n".format(arc_lns[-1] * sign, outer_lns[0] * sign,
-                                                                       top_lns[2] * sign, -inner_lns[0] * sign)
+                   "Line Loop (ll2) = {{{}, {}, {}, {}}};\n\n".format(arc_lns[-1] * sign, outer_lns[0] * sign,
+                                                                      top_lns[2] * sign, -inner_lns[0] * sign)
         geo_str += "// Modulation surfaces:\n"
         geo_str += """
 For i In {{{}:{}}}
@@ -1155,22 +1211,22 @@ EndFor
 
         geo_str += "// Front and back surfaces:\n"
         geo_str += "Plane Surface({}) = {{ll1}}; " \
-                    "Plane Surface({}) = {{ll2}};\n\n".format(surf_count, surf_count + 1)
+                   "Plane Surface({}) = {{ll2}};\n\n".format(surf_count, surf_count + 1)
 
         surf_count += 1
 
         if not symmetry:
             # Mirror the half-vane on yz plane
             geo_str += "new_surfs[] = Symmetry {{1, 0, 0, 0}} " \
-                        "{{Duplicata{{Surface {{1:{}}};}}}};\n".format(surf_count)
+                       "{{Duplicata{{Surface {{1:{}}};}}}};\n".format(surf_count)
 
             if mirror:
                 # Mirror the resulting vane on the xz plane (need to do it separately for both
                 # shells to get surface normal right
                 geo_str += "mir_vane1[] = Symmetry {{0, 1, 0, 0}} " \
-                            "{{Duplicata{{Surface {{1:{}}};}}}};\n".format(surf_count)
+                           "{{Duplicata{{Surface {{1:{}}};}}}};\n".format(surf_count)
                 geo_str += "mir_vane2[] = Symmetry {{0, 1, 0, 0}} " \
-                            "{{Duplicata{{Surface {{new_surfs[]}};}}}};\n".format(surf_count)
+                           "{{Duplicata{{Surface {{new_surfs[]}};}}}};\n".format(surf_count)
 
                 # Add physical surface to identify this vane in gmsh
                 geo_str += "Physical Surface({}) = {{1:{}, -new_surfs[], -mir_vane1[], mir_vane2[]}};\n\n".format(
@@ -1179,36 +1235,36 @@ EndFor
                 # Rotate if necessary
                 if self.vane_type == "xp":
                     geo_str += "Rotate {{{{0, 0, 1}}, {{0, 0, 0}}, {}}} " \
-                                "{{Surface {{1:{}, new_surfs[], mir_vane1[], mir_vane2[]}};}}\n".format(-0.5 * np.pi,
-                                                                                                        surf_count)
+                               "{{Surface {{1:{}, new_surfs[], mir_vane1[], mir_vane2[]}};}}\n".format(-0.5 * np.pi,
+                                                                                                       surf_count)
                 elif self.vane_type == "xm":
                     geo_str += "Rotate {{{{0, 0, 1}}, {{0, 0, 0}}, {}}} " \
-                                "{{Surface {{1:{}, new_surfs[], mir_vane1[], mir_vane2[]}};}}\n".format(0.5 * np.pi,
-                                                                                                        surf_count)
+                               "{{Surface {{1:{}, new_surfs[], mir_vane1[], mir_vane2[]}};}}\n".format(0.5 * np.pi,
+                                                                                                       surf_count)
                 elif self.vane_type == "ym":
                     geo_str += "Rotate {{{{0, 0, 1}}, {{0, 0, 0}}, {}}} " \
-                                "{{Surface {{1:{}, new_surfs[], mir_vane1[], mir_vane2[]};}}\n".format(np.pi,
-                                                                                                       surf_count)
+                               "{{Surface {{1:{}, new_surfs[], mir_vane1[], mir_vane2[]};}}\n".format(np.pi,
+                                                                                                      surf_count)
 
             else:
                 # Add physical surface to identify this vane in gmsh (unmirrored)
                 geo_str += "Physical Surface({}) = {{1:{}, -new_surfs[]}};\n\n".format(self._mesh_params["domain_idx"],
-                                                                                        surf_count)
+                                                                                       surf_count)
                 # Rotate if necessary
                 if self.vane_type == "xp":
                     geo_str += "Rotate {{{{0, 0, 1}}, {{0, 0, 0}}, {}}} " \
-                                "{{Surface {{1:{}, new_surfs[]}};}}\n".format(-0.5 * np.pi, surf_count)
+                               "{{Surface {{1:{}, new_surfs[]}};}}\n".format(-0.5 * np.pi, surf_count)
                 elif self.vane_type == "xm":
                     geo_str += "Rotate {{{{0, 0, 1}}, {{0, 0, 0}}, {}}} " \
-                                "{{Surface {{1:{}, new_surfs[]}};}}\n".format(0.5 * np.pi, surf_count)
+                               "{{Surface {{1:{}, new_surfs[]}};}}\n".format(0.5 * np.pi, surf_count)
                 elif self.vane_type == "ym":
                     geo_str += "Rotate {{{{0, 0, 1}}, {{0, 0, 0}}, {}}} " \
-                                "{{Surface {{1:{}, new_surfs[]}};}}\n".format(np.pi, surf_count)
+                               "{{Surface {{1:{}, new_surfs[]}};}}\n".format(np.pi, surf_count)
 
         else:
             # Add physical surface to identify this vane in gmsh
             geo_str += "Physical Surface({}) = {{1:{}}};\n\n".format(self._mesh_params["domain_idx"],
-                                                                      surf_count)
+                                                                     surf_count)
             # Create the Neumann BC surface
             axis_pts = list(range(new_pt, new_pt + 2))
             # new_pt = axis_pts[-1] + 1
@@ -1228,10 +1284,10 @@ EndFor
             surf_count += 1
 
             geo_str += "ll = newll; " \
-                        "Line Loop (ll) = {{{}:{}, {}, {}, {}}}; " \
-                        "Plane Surface({}) = {{ll}};\n\n".format(spline1_lns[0] * sign, spline1_lns[-1] * sign,
-                                                                 nb_lns[0] * sign, nb_lns[1] * sign, nb_lns[2] * sign,
-                                                                 surf_count)
+                       "Line Loop (ll) = {{{}:{}, {}, {}, {}}}; " \
+                       "Plane Surface({}) = {{ll}};\n\n".format(spline1_lns[0] * sign, spline1_lns[-1] * sign,
+                                                                nb_lns[0] * sign, nb_lns[1] * sign, nb_lns[2] * sign,
+                                                                surf_count)
 
             # Add physical surface to identify the Neumann BC in gmsh
             geo_str += "Physical Surface({}) = {{{}}};\n\n".format(0, surf_count)
@@ -1290,46 +1346,57 @@ EndFor
             reverse_mesh = self._mesh_params["reverse_mesh"]
 
         # Calculate z_data and vane profile:
-        nz = self._mesh_params["nz"]
-        # nz = int(np.round(self._length / dx, 0) + 1)  # Number of points to use
-        z, profile = self.get_profile(nz=nz)
+        z, profile = self.get_profile(nz=self._mesh_params["nz"])
+        pmax = profile.max()
 
-        extra = profile.max() - profile.min() + 0.001
+        # Calculate minimum possible absolute height (1 mm above the maximum vane modulation):
+        h_min = 0.0
+        has_rms = False
+        for _cell in self._cells:
+            if _cell.cell_type == "RMS":
+                has_rms = True
+            # Check for maximum modulated vanes plus 1 mm for safety.
+            if _cell.cell_type not in ["STA", "RMS"]:
+                _h = _cell.aperture * _cell.modulation + 0.001
+                if h_min < _h:
+                    h_min = _h
 
         # Consistency check for absolute h_type
         if h_type == 'absolute':
 
-            if h_block <= profile.max() + r_tip:
+            if h_block >= pmax:
 
-                print("Error during geo string generation: h_type is 'absolute', "
-                      "but vane modulation (max = {} m) extends past "
-                      "specified height ({} m). Did you include the tip radius?".format(profile.max() + r_tip,
-                                                                                        h_block))
+                ymax = h_block
+
+            elif h_block >= h_min:
+
+                print("*** Warning: h_block < pmax, but larger than maximum vane modulation. "
+                      "This will cut into the RMS Section! Continuing.")
+                ymax = h_block
+
+            else:
+
+                print("It seems that the 'absolute' h_block (height) value is too small" \
+                      " and would leave less than 1 mm material in some places above the modulation. " \
+                      "Aborting.")
                 return 1
-
-            elif h_block <= profile.max() + r_tip + 0.001:
-
-                print("Warning during geo string generation: vane modulation and "
-                      "specified height will lead to very thin section which might lead to meshing errors.")
-
-            ymax = h_block
 
         elif h_type == 'relative':
 
-            ymax = r_tip + np.max(profile) + h_block
+            ymax = pmax + h_block
+
+            print("h_type 'relative' deactivated for the moment. Aborting. -DW")
+            return 1
 
         else:
 
             print("Unknown 'h_type'.")
             return 1
 
-        # sign = 1
-
         # TODO: Look into what the best meshing parameters are!
         # TODO: Look into number of threads!
         geo_str = """SetFactory("OpenCASCADE");
 Geometry.NumSubEdges = 500; // nicer display of curve
-//Geometry.OCCAutoFix = 0;
 //General.NumThreads = 2;
 Mesh.CharacteristicLengthMax = {};
 h = {};
@@ -1355,7 +1422,8 @@ h = {};
         new_vol = 1
         spline1_pts = [new_pt]
 
-        # Center center spline
+        # Center spline
+        # TODO: Here we could add an option for the cut-ins -DW
         geo_str += "// Center Spline:\n"
         for _z, _a in zip(z, profile):
             geo_str += "Point({}) = {{ {}, {}, {}, h }};\n".format(spline1_pts[-1], 0.0, _a, _z)
@@ -1369,73 +1437,202 @@ Spline({}) = {{ {}:{} }};
 
 """.format(new_ln, spline1_pts[0], spline1_pts[-1])
 
+        # Immediately delete the points used up in the spline
+        geo_str += "Recursive Delete {{ Point{{ {}:{} }}; }}\n".format(spline1_pts[1], spline1_pts[-2])
+
         spline_ln = new_ln
         new_ln += 1
 
+        # --- Make a profile to follow the modulation path ('sweep' in Inventor, 'pipe' in OpenCascade) --- #
+        profile_start_angle = np.arctan2(profile[1] - profile[0], z[1] - z[0])
+        profile_end_angle = np.arctan2(profile[-1] - profile[-2], z[-1] - z[-2])
+
+        print("Profile Start Angle = {} deg".format(-np.rad2deg(profile_start_angle)))
+        print("Profile End Angle = {} deg".format(-np.rad2deg(profile_end_angle)))
+
+        adj_psa_deg = -np.rad2deg(profile_start_angle)
+        adj_pea_deg = np.rad2deg(profile_end_angle)
+
         geo_str += "// Points making up the sweep face:\n"
-        face_pts = list(range(new_pt, new_pt + 5))
+        face_pts = list(range(new_pt, new_pt + 4))
 
         # Square points:
         geo_str += "Point({}) = {{ {}, {}, {}, h }};\n".format(face_pts[0], -r_tip, profile[0] + r_tip, z[0])
-        geo_str += "Point({}) = {{ {}, {}, {}, h }};\n".format(face_pts[1], -r_tip, ymax + extra, z[0])
-        geo_str += "Point({}) = {{ {}, {}, {}, h }};\n".format(face_pts[2], r_tip, ymax + extra, z[0])
-        geo_str += "Point({}) = {{ {}, {}, {}, h }};\n".format(face_pts[3], r_tip, profile[0] + r_tip, z[0])
+        geo_str += "Point({}) = {{ {}, {}, {}, h }};\n".format(face_pts[1], r_tip, profile[0] + r_tip, z[0])
 
-        # Semi-circle center (need to make two quarter circles maybe? -DW):
-        geo_str += "Point({}) = {{ {}, {}, {}, h }};\n".format(face_pts[4], 0.0, profile[0] + r_tip, z[0])
+        # Semi-circle center:
+        geo_str += "Point({}) = {{ {}, {}, {}, h }};\n".format(face_pts[2], 0.0, profile[0] + r_tip, z[0])
         geo_str += "\n"
 
         # Lines for sweep face:
         face_lns = []
-        for i in range(3):
+        for i in range(1):
             face_lns.append(new_ln)
-            geo_str += "Line({}) = {{ {}, {} }};\n".format(new_ln, face_pts[i], face_pts[i+1])
+            geo_str += "Line({}) = {{ {}, {} }};\n".format(new_ln, face_pts[i], face_pts[i + 1])
             new_ln += 1
 
         # Semi-circle:
         face_lns.append(new_ln)
-        geo_str += "Circle({}) = {{ {}, {}, {}}};\n".format(new_ln, face_pts[3], face_pts[4], face_pts[0])
+        geo_str += "Circle({}) = {{ {}, {}, {}}};\n".format(new_ln, face_pts[1], face_pts[2], face_pts[0])
         geo_str += "\n"
         new_ln += 1
 
         # Sweep Face:
-        geo_str += "Curve Loop({}) = {{ {}, {}, {}, {} }};".format(new_loop,
-                                                                   face_lns[0],
-                                                                   face_lns[1],
-                                                                   face_lns[2],
-                                                                   face_lns[3])
+        geo_str += "Curve Loop({}) = {{ {}, {} }};\n".format(new_loop,
+                                                             face_lns[0],
+                                                             face_lns[1],
+                                                             )
         new_loop += 1
 
         sweep_surf = new_surf
         geo_str += "Plane Surface({}) = {{ {} }};\n".format(new_surf, new_loop - 1)
+        geo_str += "Rotate {{{{1, 0, 0}}, {{ {}, {}, {}}}, {}}} {{Surface {{ {} }}; }}\n".format(0.0,
+                                                                                                 profile[0],
+                                                                                                 z[0],
+                                                                                                 -profile_start_angle,
+                                                                                                 new_surf)
         geo_str += "\n"
         new_surf += 1
+
+        # Delete now unused center-point of circle (was duplicated)
+        geo_str += "Recursive Delete {{ Point{{ {} }}; }}\n".format(face_pts[2])
 
         # Extrusion:
         geo_str += "Wire({}) = {{ {} }};\n".format(new_loop, spline_ln)
         geo_str += "Extrude {{ Surface{{ {} }}; }} Using Wire {{ {} }}\n".format(sweep_surf, new_loop)
-        geo_str += "\n"
         new_loop += 1
-        extrude_vol = new_vol
+        extrude_vol_1 = new_vol
         new_vol += 1  # Extrude creates a volume
 
-        # Delete initial sweep surface and center point of circle (both now redundant)
-        geo_str += "Recursive Delete {{ Surface{{ {} }}; }}\n" \
-                   "Recursive Delete {{ Point{{ {} }}; }}\n".format(sweep_surf, face_pts[4])
+        # Delete initial sweep surface (now redundant)
+        geo_str += "Recursive Delete {{ Surface {{ {} }}; }}\n".format(sweep_surf)
+        # Delete the spline (now redundant)
+        geo_str += "Recursive Delete {{ Curve{{ {} }}; }}\n".format(spline_ln)
 
-        # Create a box to subtract:
-        box_vol = new_vol
-        padding = 0.01
-        geo_str += "Box({}) = {{ {}, {}, {}, {}, {}, {} }};\n".format(new_vol,
-                                                                      -(r_tip + padding), ymax, z[0] - padding,
-                                                                      2 * (r_tip + padding),
-                                                                      extra + padding, z[-1] + 2 * padding)
+        # We now have a volume of the modulated part regardless of h_block and RMS section yes/no.
+        # All redundant points, lines and surfaces have been deleted.
+        # ------------------------------------------------------------------------------------------------------------ #
 
-        geo_str += "BooleanDifference{{ Volume{{ {} }}; Delete; }}{{ Volume{{ {} }}; Delete; }}\n".format(extrude_vol,
-                                                                                                          box_vol)
-        geo_str += "\n"
-        new_vol += 1
+        # --- Next step: Fill up the volume above to make height of vane = ymax -------------------------------------- #
+        # - Cases:
+        # 1. Both start and end angles are tilted inwards /===\ (using minimum tilt of 1 deg for now).
+        # 2. Both start and end angles are straight or tilted outwards |===| or \===/
+        # 3. Start angle is tilted inwards, end angle is straight or tilted outwards /===| (e.g. ony using start RMS)
+        # 4. Start angle is straight or tilted outwards, end angle is tilted inwards |===\ (e.g. only using exit RMS)
+        if adj_psa_deg >= 1.0 and adj_pea_deg >= 1.0:
+            case = 1
+        elif adj_psa_deg < 1.0 and adj_pea_deg < 1.0:
+            case = 2
+        elif adj_pea_deg < 1.0 <= adj_psa_deg:
+            case = 3
+        else:
+            case = 4
 
+        # In case 1, we can extend the end-caps upwards 1 m (just some large number),
+        # then cut off a big block from the top. End caps will be surfaces 2 and 5
+        if case == 1:
+            geo_str += "Extrude {0, 1, 0} { Surface{ 2 }; }\n"
+            geo_str += "Extrude {0, 1, 0} { Surface{ 5 }; }\n\n"
+
+            geo_str += "// Delete redundant volumes, surfaces, lines to form a new volume later\n"
+            geo_str += "Delete { Volume{ 1, 2, 3 }; }\n"
+            geo_str += "Delete { Surface{ 2, 3, 5, 6, 9 }; }\n"
+            geo_str += "Delete { Curve{ 4, 8 }; }\n"
+
+            geo_str += "Line(18) = {{ {}, {} }};\n".format(new_pt + 12, new_pt + 10)
+            geo_str += "Line(19) = {{ {}, {} }};\n".format(new_pt + 9, new_pt + 11)
+            geo_str += """
+Curve Loop(13) = {19, 16, 18, -12};
+Plane Surface(12) = {13};
+Curve Loop(14) = {18, -11, 7, 15};
+Plane Surface(13) = {14};
+Curve Loop(15) = {19, -14, -6, 10};
+Plane Surface(14) = {15};
+Surface Loop(4) = {13, 12, 14, 10, 11, 4, 7, 8};
+Volume(1) = {4};
+Delete { Surface{ 7, 10}; }
+"""
+        # In case 2 we create a block above the 4 endpoints of the semi-circles
+        elif case == 2:
+            geo_str += "Translate {{ 0, 1, 0 }} {{ Duplicata{{ Point{{ {}, {}, {}, {} }}; }} }}\n".format(new_pt + 5,
+                                                                                                          new_pt + 6,
+                                                                                                          new_pt + 7,
+                                                                                                          new_pt + 8)
+            geo_str += "Delete { Volume{ 1 }; }\n"
+            geo_str += "Delete { Surface{ 3 }; }\n"
+
+            geo_str += "Line(10) = {{ {}, {} }};\n".format(new_pt + 10, new_pt + 9)
+            geo_str += "Line(11) = {{ {}, {} }};\n".format(new_pt + 9, new_pt + 11)
+            geo_str += "Line(12) = {{ {}, {} }};\n".format(new_pt + 11, new_pt + 12)
+            geo_str += "Line(13) = {{ {}, {} }};\n".format(new_pt + 12, new_pt + 10)
+            geo_str += "Line(14) = {{ {}, {} }};\n".format(new_pt + 8, new_pt + 12)
+            geo_str += "Line(15) = {{ {}, {} }};\n".format(new_pt + 11, new_pt + 7)
+            geo_str += "Line(16) = {{ {}, {} }};\n".format(new_pt + 6, new_pt + 10)
+            geo_str += "Line(17) = {{ {}, {}}};\n".format(new_pt + 9, new_pt + 5)
+
+            geo_str += """
+Curve Loop(7) = {13, 10, 11, 12}; Plane Surface(6) = {7};
+Curve Loop(8) = {12, -14, -8, -15}; Plane Surface(7) = {8};
+Curve Loop(9) = {16, 10, 17, 4}; Plane Surface(8) = {9};
+Curve Loop(10) = {13, -16, 7, 14}; Plane Surface(9) = {10};
+Curve Loop(11) = {15, -6, -17, 11}; Plane Surface(10) = {11};
+Surface Loop(2) = {6, 9, 8, 10, 7, 5, 4, 2}; Volume(1) = {2};
+"""
+        elif case == 3:
+            geo_str += "Extrude {0, 1, 0} { Surface{ 2 }; }\n"
+            geo_str += "Translate {{ 0, 1, 0 }} {{ Duplicata{{ Point{{ {}, {} }}; }} }}\n".format(new_pt + 7,
+                                                                                                  new_pt + 8)
+
+            geo_str += "// Delete redundant volumes, surfaces, lines to form a new volume later\n"
+            geo_str += "Delete { Volume{ 1, 2 }; }\n"
+            geo_str += "Delete { Surface{ 2, 3, 6}; }\n"
+            geo_str += "Delete { Curve{ 4 }; }\n"
+
+            geo_str += "Line(14) = {{ {}, {} }};\n".format(new_pt + 10, new_pt + 12)
+            geo_str += "Line(15) = {{ {}, {} }};\n".format(new_pt + 9, new_pt + 11)
+            geo_str += "Line(16) = {{ {}, {} }};\n".format(new_pt + 11, new_pt + 12)
+            geo_str += "Line(17) = {{ {}, {}}};\n".format(new_pt + 12, new_pt + 8)
+            geo_str += "Line(18) = {{ {}, {} }};\n".format(new_pt + 11, new_pt + 7)
+
+            geo_str += """
+Curve Loop(10) = {16, -14, -12, 15}; Plane Surface(9) = {10};
+Curve Loop(11) = {17, -7, 11, 14}; Plane Surface(10) = {11};
+Curve Loop(12) = {17, -8, -18, 16}; Plane Surface(11) = {12};
+Curve Loop(13) = {18, -6, 10, 15}; Plane Surface(12) = {13}; 
+Surface Loop(3) = {10, 11, 5, 4, 12, 7, 8, 9}; Volume(1) = {3};
+"""
+            geo_str += "Delete { Surface{ 7 }; }\n"
+
+        elif case == 4:
+            geo_str += "Extrude {0, 1, 0} { Surface{ 5 }; }\n\n"
+            geo_str += "Translate {{ 0, 1, 0 }} {{ Duplicata{{ Point{{ {}, {} }}; }} }}\n".format(new_pt + 5,
+                                                                                                  new_pt + 6)
+
+            geo_str += "// Delete redundant volumes, surfaces, lines to form a new volume later\n"
+            geo_str += "Delete { Volume{ 1, 2 }; }\n"
+            geo_str += "Delete { Surface{3, 5, 6}; }\n"
+            geo_str += "Delete { Curve{ 8 }; }\n"
+
+            geo_str += "Line(14) = {{ {}, {} }};\n".format(new_pt + 10, new_pt + 12)
+            geo_str += "Line(15) = {{ {}, {} }};\n".format(new_pt + 9, new_pt + 11)
+            geo_str += "Line(16) = {{ {}, {} }};\n".format(new_pt + 12, new_pt + 11)
+            geo_str += "Line(17) = {{ {}, {}}};\n".format(new_pt + 6, new_pt + 12)
+            geo_str += "Line(18) = {{ {}, {} }};\n".format(new_pt + 5, new_pt + 11)
+
+            geo_str += """
+Curve Loop(10) = {14, 16, -15, 12}; Plane Surface(9) = {10};
+Curve Loop(11) = {14, -17, 7, 11}; Plane Surface(10) = {11};
+Curve Loop(12) = {6, 10, 15, -18}; Plane Surface(11) = {12};
+Curve Loop(13) = {16, -18, 4, 17}; Plane Surface(12) = {13};
+Surface Loop(3) = {10, 9, 12, 11, 4, 7, 8, 2}; Volume(1) = {3};
+"""
+            geo_str += "Delete { Surface{ 7 }; }\n"
+        # ------------------------------------------------ END CASES ------------------------------------------------- #
+
+        geo_str += "Box(2) = {{ -0.5, {}, {}, 1, 2, {} }};\n".format(ymax, z[0]-0.25, z[-1] - z[0] + 0.5)
+        geo_str += """
+BooleanDifference{ Volume{1}; Delete; }{ Volume{2}; Delete; }
+"""
         # Add physical surface to identify this vane in gmsh (unmirrored)
         geo_str += """
 s() = Surface "*";
@@ -1446,27 +1643,34 @@ Physical Surface({}) = {{ s() }};
         # Rotate according to vane type
         if self.vane_type == "xp":
             geo_str += "Rotate {{{{0, 0, 1}}, {{0, 0, 0}}, {}}} " \
-                       "{{Volume {{ {} }}; }}\n".format(-0.5 * np.pi, extrude_vol)
+                       "{{Volume {{ {} }}; }}\n".format(-0.5 * np.pi, extrude_vol_1)
         elif self.vane_type == "xm":
             geo_str += "Rotate {{{{0, 0, 1}}, {{0, 0, 0}}, {}}} " \
-                       "{{Volume {{ {} }}; }}\n".format(0.5 * np.pi, extrude_vol)
+                       "{{Volume {{ {} }}; }}\n".format(0.5 * np.pi, extrude_vol_1)
         elif self.vane_type == "ym":
             geo_str += "Rotate {{{{0, 0, 1}}, {{0, 0, 0}}, {}}} " \
-                       "{{Volume {{ {} }}; }}\n".format(np.pi, extrude_vol)
+                       "{{Volume {{ {} }}; }}\n".format(np.pi, extrude_vol_1)
 
-        # Finally, delete the spline and corresponding points
-        geo_str += "Recursive Delete {{ Curve{{ {} }}; }}\n".format(spline_ln)
-        geo_str += "Recursive Delete {{ Point{{ {}:{} }}; }}\n".format(spline1_pts[1], spline1_pts[-2])
-
-        # Make the modulated surface transfinite for fast meshing.
-        geo_str += """
-Transfinite Surface {2};
-
-"""
         if reverse_mesh:
             geo_str += """
-ReverseMesh Surface { s() };          
-
+ReverseMesh Surface { s() };
+"""
+        # TODO: Adjust the transfinite surfaces for all the correct ones for the different cases.
+        if case == 1:
+            geo_str += """
+Transfinite Surface { 2, 3 };
+"""
+        elif case == 2:
+            geo_str += """
+Transfinite Surface { 3 };
+"""
+        elif case == 3:
+            geo_str += """
+Transfinite Surface { 3, 4 };
+"""
+        elif case == 4:
+            geo_str += """
+Transfinite Surface { 3 };
 """
 
         self._mesh_params["geo_str"] = geo_str
@@ -1490,50 +1694,52 @@ ReverseMesh Surface { s() };
             with open(geo_fn, "w") as _of:
                 _of.write(self._mesh_params["geo_str"])
 
-            command = "{} \"{}\" -0 -o \"{}\" -format brep".format(GMSH_EXE, geo_fn, brep_fn)
-            if self._debug:
-                print("Running", command)
-                sys.stdout.flush()
-            gmsh_success += os.system(command)
+            if not NO_MESH:
 
-            refine_str = """
-Merge "{}";
-Mesh.SecondOrderLinear = 0;
-RefineMesh;
-""".format(msh_fn)
-
-            with open(refine_fn, "w") as _of:
-                _of.write(refine_str)
-
-            # TODO: Could we use higher order (i.e. curved) meshes? -DW
-            # For now, we need to save in msh2 format for BEMPP compability
-            command = "{} \"{}\" -2 -o \"{}\" -format msh2".format(GMSH_EXE, geo_fn, msh_fn)
-            if self._debug:
-                print("Running", command)
-                sys.stdout.flush()
-            gmsh_success += os.system(command)
-
-            for i in range(self._mesh_params["refine_steps"]):
-                command = "{} \"{}\" -0 -o \"{}\" -format msh2".format(GMSH_EXE, refine_fn, msh_fn)
+                command = "{} \"{}\" -0 -o \"{}\" -format brep".format(GMSH_EXE, geo_fn, brep_fn)
                 if self._debug:
                     print("Running", command)
                     sys.stdout.flush()
                 gmsh_success += os.system(command)
 
-            # --- TODO: For testing: save stl mesh file also
-            command = "{} \"{}\" -0 -o \"{}\" -format stl".format(GMSH_EXE, msh_fn, stl_fn)
-            if self._debug:
-                print("Running", command)
-                sys.stdout.flush()
-            gmsh_success += os.system(command)
-            # --- #
+                refine_str = """
+Merge "{}";
+Mesh.SecondOrderLinear = 0;
+RefineMesh;
+""".format(msh_fn)
 
-            if gmsh_success != 0:  # or not os.path.isfile("shape.stl"):
-                print("Something went wrong with gmsh, be sure you defined "
-                      "the correct path at the beginning of the file!")
-                return 1
+                with open(refine_fn, "w") as _of:
+                    _of.write(refine_str)
 
-            self.set_mesh_parameter("msh_fn", msh_fn)
+                # TODO: Could we use higher order (i.e. curved) meshes? -DW
+                # For now, we need to save in msh2 format for BEMPP compability
+                command = "{} \"{}\" -2 -o \"{}\" -format msh2".format(GMSH_EXE, geo_fn, msh_fn)
+                if self._debug:
+                    print("Running", command)
+                    sys.stdout.flush()
+                gmsh_success += os.system(command)
+
+                for i in range(self._mesh_params["refine_steps"]):
+                    command = "{} \"{}\" -0 -o \"{}\" -format msh2".format(GMSH_EXE, refine_fn, msh_fn)
+                    if self._debug:
+                        print("Running", command)
+                        sys.stdout.flush()
+                    gmsh_success += os.system(command)
+
+                # --- TODO: For testing: save stl mesh file also
+                command = "{} \"{}\" -0 -o \"{}\" -format stl".format(GMSH_EXE, msh_fn, stl_fn)
+                if self._debug:
+                    print("Running", command)
+                    sys.stdout.flush()
+                gmsh_success += os.system(command)
+                # --- #
+
+                if gmsh_success != 0:  # or not os.path.isfile("shape.stl"):
+                    print("Something went wrong with gmsh, be sure you defined "
+                          "the correct path at the beginning of the file!")
+                    return 1
+
+                self.set_mesh_parameter("msh_fn", msh_fn)
 
         return 0
 
@@ -1568,7 +1774,8 @@ RefineMesh;
 
         assert self._has_profile, "No profile has been generated!"
 
-        z = np.round(np.linspace(0.0, self._length, nz), decimals)
+        # Cutting the RFQ short by 1e-10 to not get out of bound error in interpolation
+        z = np.round(np.linspace(0.0, self._length - 1e-10, nz), decimals)
         vane = np.zeros(z.shape)
 
         cum_len = 0.0
@@ -1862,7 +2069,8 @@ class PyRFQ(object):
                                      fillet_radius=fillet_radius,
                                      shift_cell_no=shift_cell_no,
                                      prev_cell=pc,
-                                     next_cell=None))
+                                     next_cell=None,
+                                     debug=self._debug))
 
         if len(self._cells) > 1:
             self._cells[-2].set_next_cell(self._cells[-1])
@@ -1941,7 +2149,8 @@ class PyRFQ(object):
                                                      flip_z=False,
                                                      shift_cell_no=False,
                                                      prev_cell=None,
-                                                     next_cell=None))
+                                                     next_cell=None,
+                                                     debug=self._debug))
 
                     continue
 
@@ -1970,7 +2179,8 @@ class PyRFQ(object):
                                              flip_z=False,
                                              shift_cell_no=False,
                                              prev_cell=pc,
-                                             next_cell=None))
+                                             next_cell=None,
+                                             debug=self._debug))
 
                 if len(self._cells) > 1:
                     self._cells[-2].set_next_cell(self._cells[-1])
@@ -2478,8 +2688,7 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
         dirichlet_fun = bempp.api.GridFunction(p1_space, fun=f)
         rhs = (.5 * identity + dlp) * dirichlet_fun
 
-        if self._debug:
-            if RANK == 0:
+        if self._debug and RANK == 0:
                 dirichlet_fun.plot()
                 bempp.api.export(grid_function=dirichlet_fun, file_name="dirichlet_fun.msh")
 
@@ -2488,8 +2697,7 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
         # sol, info = bempp.api.linalg.gmres(slp, dirichlet_fun, tol=1e-5, use_strong_form=True)
         # sol, info = bempp.api.linalg.gmres(slp, dirichlet_fun, tol=1e-5, use_strong_form=False)
 
-        if self._debug:
-            if RANK == 0:
+        if self._debug and RANK == 0:
                 bempp.api.export(grid_function=neumann_fun, file_name="neumann_fun.msh")
 
         # self._variables_bempp["solution"] = sol
@@ -2564,7 +2772,6 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
         h = self._variables_bempp["grid_res"]
         dx = h  # TODO: This needs to become user parameter and consolidated with other params.
 
-
         if RANK == 0:
             print("Copying vanes and regenerating geo string.")
             sys.stdout.flush()
@@ -2575,8 +2782,11 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
             new_vane.generate_geo_str(dx=dx, h=h,
                                       symmetry=False, mirror=False)
             self._vanes.append(new_vane)
-        return 0
+
         COMM.barrier()
+
+
+
         if RANK == 0:
             print("Generating openCascade model of the vanes.")
             sys.stdout.flush()
@@ -2650,7 +2860,7 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
             self._vanes = COMM.bcast(mpi_data, root=0)["vanes"]
             COMM.barrier()
 
-        # Unfortunately, multiprocessing/MPI can't handle SwigPyObject objects
+        # # Unfortunately, multiprocessing/MPI can't handle SwigPyObject objects
         # for _vane in self._vanes:
         #     _vane.generate_occ(npart=npart)
 
@@ -2874,8 +3084,8 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
     Dim oSweep As SweepFeature
     ' Note: I am not sure if keeping the profile perpendicular to the path is more accurate, 
     ' but unfortunately for trapezoidal cells (small fillets) it doesn't work
-    ' so it has to be a 'parallel to original profile' kinda sweep
-    Set oSweep = oCompDef.Features.SweepFeatures.AddUsingPath(oProfile, oPath, kJoinOperation, kParallelToOriginalProfile)
+    ' so it has to be a 'parallel to original profile' kinda sweep -- or not? , kParallelToOriginalProfile
+    Set oSweep = oCompDef.Features.SweepFeatures.AddUsingPath(oProfile, oPath, kJoinOperation)
 """
 
             # Small modification depending on absolute or relative vane height:
@@ -2993,6 +3203,10 @@ End Sub
 
 if __name__ == "__main__":
 
+    r_vane = 0.0093
+    h_vane = 0.12
+    nz = 500
+
     # myfn = "PARMTEQOUT_14Cells.TXT"
     """
     myfn = "PARMTEQOUT.TXT"
@@ -3058,7 +3272,58 @@ if __name__ == "__main__":
     if myrfq.add_cells_from_file(filename=myfn, ignore_rms=False) != 0:
         exit()
 
-    print(myrfq)
+    # Transition cell is
+    # TODO: Make transition cells "auto"-aperture/modulation/length
+    myrfq.append_cell(cell_type="TCS",
+                      aperture=0.007147,
+                      modulation=1.6778,
+                      length=0.032727)
+
+    myrfq.append_cell(cell_type="DCS",
+                      aperture=0.0095691183,
+                      modulation=1.0,
+                      length=0.02)
+
+    # Trapezoidal Rebunching Cell
+    # TODO: Maybe think about ap and m in context of trapezoidal rebuncher
+    # TODO: Maybe frame TRC in TCS's?
+    myrfq.append_cell(cell_type="TRC",
+                      aperture=0.0095691183,
+                      modulation=1.5,
+                      length=0.075,
+                      fillet_radius=2 * r_vane)  # Needs to be larger than r_vane for sweep
+
+    myrfq.append_cell(cell_type="DCS",
+                      aperture=0.0095691183,
+                      modulation=1.0,
+                      length=0.02)
+
+    myrfq.append_cell(cell_type="RMS",
+                      aperture=0.009718,
+                      modulation=1.0,
+                      length=0.018339)
+
+    myrfq.append_cell(cell_type="RMS",
+                      aperture=0.010944,
+                      modulation=1.0,
+                      length=0.018339)
+
+    myrfq.append_cell(cell_type="RMS",
+                      aperture=0.016344,
+                      modulation=1.0,
+                      length=0.018339)
+
+    myrfq.append_cell(cell_type="RMS",
+                      aperture=0.041051,
+                      modulation=1.0,
+                      length=0.018339)
+
+    myrfq.append_cell(cell_type="RMS",
+                      aperture=0.15,
+                      modulation=1.0,
+                      length=0.018339)
+
+    # print(myrfq)
 
     # TODO: Idea: Make ElectrodeObject class from which other electrodes inherit?
     # TODO: Idea: Make ElectrostaticSolver class that can be reused (e.g. for Spiral Inflector)?
@@ -3068,13 +3333,13 @@ if __name__ == "__main__":
     myrfq.set_bempp_parameter("grid_res", 0.004)  # characteristic mesh size during initial meshing
     myrfq.set_bempp_parameter("refine_steps", 0)  # number of times gmsh is called to "refine by splitting"
 
-    myrfq.set_geometry_parameter("vane_radius", 0.0093)
-    myrfq.set_geometry_parameter("vane_height", 0.165)
+    myrfq.set_geometry_parameter("vane_radius", r_vane)
+    myrfq.set_geometry_parameter("vane_height", h_vane)
     myrfq.set_geometry_parameter("vane_height_type", 'absolute')
 
     # Steps along z for spline interpolation of vane profile
     # Cave: Needs to be fairly high-res to resolve trapezoidal cells
-    myrfq.set_geometry_parameter("nz", 500)
+    myrfq.set_geometry_parameter("nz", nz)
 
     if RANK == 0:
         print("Generating vanes")
@@ -3085,13 +3350,11 @@ if __name__ == "__main__":
 
     if RANK == 0:
         myrfq.plot_vane_profile()
-        myrfq.write_inventor_macro(vane_type='vane',
-                                   vane_radius=0.0093,
-                                   vane_height=0.165,
-                                   vane_height_type='absolute',
-                                   nz=500)
-
-    exit()
+        # myrfq.write_inventor_macro(vane_type='vane',
+        #                            vane_radius=r_vane,
+        #                            vane_height=h_vane,
+        #                            vane_height_type='absolute',
+        #                            nz=nz)
 
     if RANK == 0:
         print("Loading and assembling full mesh for BEMPP")
@@ -3099,8 +3362,7 @@ if __name__ == "__main__":
     myrfq.generate_full_mesh()
     if RANK == 0:
         print("Assembling mesh took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
-    exit()
-        
+
     # input("Hit enter to continue...")
     if RANK == 0:
         print("Solving BEMPP problem")
@@ -3109,6 +3371,8 @@ if __name__ == "__main__":
         myrfq.solve_bempp()
     if RANK == 0:
         print("Solving BEMPP took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
+
+    exit()
 
     ts = time.time()
     myres = [0.002, 0.002, 0.002]
@@ -3126,6 +3390,7 @@ if __name__ == "__main__":
 
     if RANK == 0:
         import pickle
+
         with open("ef_phi.field", "wb") as outfile:
             pickle.dump(myrfq.get_phi(), outfile)
 
