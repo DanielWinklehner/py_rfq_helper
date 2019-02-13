@@ -20,8 +20,11 @@ import copy
 import os
 import sys
 import shutil
+
 from py_electrodes import ElectrodeObject
 from matplotlib.patches import Arc as Arc
+
+load_previous = False
 
 # Check if we can connect to a display, if not disable all plotting and windowed stuff (like gmsh)
 # TODO: This does not remotely cover all cases!
@@ -41,26 +44,30 @@ except ImportError:
 
 # --- Try importing mpi4py, if it fails, we fall back to single processor
 try:
+    
     from mpi4py import MPI
-
     COMM = MPI.COMM_WORLD
     RANK = COMM.Get_rank()
     SIZE = COMM.Get_size()
     HOST = MPI.Get_processor_name()
+
     print("Process {} of {} on host {} started!".format(RANK + 1, SIZE, HOST))
+
 except ImportError:
-    print("Could not import mpi4py, falling back to single core (and python multiprocessing in some instances)!")
+    
     MPI = None
     COMM = None
     RANK = 0
     SIZE = 1
     import socket
-
     HOST = socket.gethostname()
 
+    print("Could not import mpi4py, falling back to single core (and python multiprocessing in some instances)!")
+    
 # --- Try importing pythonocc-core
 HAVE_OCC = False
 try:
+    
     from OCC.Extend.DataExchange import read_stl_file
     from OCC.Display.SimpleGui import init_display
     from OCC.Core.BRepPrimAPI import BRepPrimAPI_MakeBox, BRepPrimAPI_MakeTorus, BRepPrimAPI_MakeSweep
@@ -83,8 +90,10 @@ try:
     HAVE_OCC = True
 
 except ImportError:
-    print("Something went wrong during OCC import. No CAD support possible!")
 
+    print("Something went wrong during OCC import. No CAD support possible!")
+    print("ALL IMPORTS DONE")
+    
 USE_MULTIPROC = True  # In case we are not using mpi or only using 1 processor, fall back on multiprocessing
 NO_MESH = False  # Debug flag for omitting the gmsh/BEMPP mesh generation
 # GMSH_EXE = "C:\gmsh3\gmsh.exe"  # TODO: For now use gmsh 3.0, because new 4.0 handles surface normals differently
@@ -94,12 +103,14 @@ np.set_printoptions(threshold=10000)
 
 # For now, everything involving the pymodules with be done on master proc (RANK 0)
 if RANK == 0:
+    
     from dans_pymodules import *
-
     colors = MyColors()
-else:
-    colors = None
 
+else:
+    
+    colors = None
+    
 decimals = 12
 
 __author__ = "Daniel Winklehner, Siddhartha Dechoudhury"
@@ -2685,15 +2696,23 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
             result[0] = domain_mapping[domain_index]
 
         # dirichlet_fun = bempp.api.GridFunction(dp0_space, fun=f)
-        dirichlet_fun = bempp.api.GridFunction(p1_space, fun=f)
-        rhs = (.5 * identity + dlp) * dirichlet_fun
+        if load_previous:
+            dirichlet_fun = bempp.api.import_grid("dirichlet_fun.msh")
+        else:
+            dirichlet_fun = bempp.api.GridFunction(p1_space, fun=f)
+            rhs = (.5 * identity + dlp) * dirichlet_fun
 
         if self._debug and RANK == 0:
                 dirichlet_fun.plot()
                 bempp.api.export(grid_function=dirichlet_fun, file_name="dirichlet_fun.msh")
 
         # Solve
-        neumann_fun, info = bempp.api.linalg.cg(slp, rhs, tol=1e-5)
+        if load_previous:
+            neumann_fun = bempp.api.import_grid("neumann_fun.msh")
+            info = None
+        else:
+            neumann_fun, info = bempp.api.linalg.cg(slp, rhs, tol=1e-5)
+            
         # sol, info = bempp.api.linalg.gmres(slp, dirichlet_fun, tol=1e-5, use_strong_form=True)
         # sol, info = bempp.api.linalg.gmres(slp, dirichlet_fun, tol=1e-5, use_strong_form=False)
 
@@ -2860,9 +2879,9 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
             self._vanes = COMM.bcast(mpi_data, root=0)["vanes"]
             COMM.barrier()
 
-        # # Unfortunately, multiprocessing/MPI can't handle SwigPyObject objects
-        # for _vane in self._vanes:
-        #     _vane.generate_occ(npart=npart)
+        # Unfortunately, multiprocessing/MPI can't handle SwigPyObject objects
+        for _vane in self._vanes:
+            _vane.generate_occ(npart=npart)
 
         return 0
 
@@ -3204,7 +3223,7 @@ End Sub
 if __name__ == "__main__":
 
     r_vane = 0.0093
-    h_vane = 0.12
+    h_vane = 0.08
     nz = 500
 
     # myfn = "PARMTEQOUT_14Cells.TXT"
@@ -3323,7 +3342,7 @@ if __name__ == "__main__":
                       modulation=1.0,
                       length=0.018339)
 
-    # print(myrfq)
+    print(myrfq)
 
     # TODO: Idea: Make ElectrodeObject class from which other electrodes inherit?
     # TODO: Idea: Make ElectrostaticSolver class that can be reused (e.g. for Spiral Inflector)?
@@ -3372,18 +3391,15 @@ if __name__ == "__main__":
     if RANK == 0:
         print("Solving BEMPP took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
-    exit()
-
     ts = time.time()
-    myres = [0.002, 0.002, 0.002]
-    rlim = 0.02
+    myres = [0.001, 0.001, 0.001]
+    rlim = 0.01
     xlims = (-rlim, rlim)
     ylims = (-rlim, rlim)
-    # zlims = (-0.1, 1.35)
-    zlims = (-0.05, 0.25)
+    zlims = (-0.05, 1.45)
     myrfq.calculate_potential(limits=(xlims, ylims, zlims),
                               res=myres,
-                              domain_decomp=(1, 1, 2),
+                              domain_decomp=(1, 1, 10),
                               overlap=0)
     if RANK == 0:
         print("Mask & Potential took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
