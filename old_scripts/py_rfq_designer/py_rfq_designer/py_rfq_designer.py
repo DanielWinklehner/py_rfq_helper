@@ -1721,7 +1721,6 @@ BooleanDifference{ Volume{1}; Delete; }{ Volume{2}; Delete; }
         geo_str += """
 s() = Surface "*";
 Physical Surface({}) = {{ s() }};
-
 """.format(self._mesh_params["domain_idx"])
 
         # Rotate according to vane type
@@ -1938,7 +1937,8 @@ class PyRFQ(object):
                                  "add_cyl": False,  # Do we want to add a grounded cylinder to the BEMPP problem
                                  "add_endplates": False,  # Or just grounded end plates
                                  "cyl_id": 0.2,  # Inner diameter of surrounding cylinder
-                                 "cyl_gap": 0.01,  # gap between vanes and cylinder TODO: Maybe make this asymmetric?
+                                 "ap_id": 0.02,  # Entrance and exit aperture diameter TODO: Make this asymmetric!
+                                 "cyl_gap": 0.01,  # gap between vanes and cylinder TODO: Make this asymmetric!
                                  "d": None,
                                  "n": None,
                                  "limits": None
@@ -2582,11 +2582,11 @@ out[] = Extrude{0, 0, len} { Surface {6}; };
 Physical Surface(100) = {6, out[]};
 
 """
-                # noinspection PyCallingNonCallable
                 if self._debug:
                     with open("cyl_str.geo", "w") as _of:
                         _of.write(cyl_geo_str)
 
+                # noinspection PyCallingNonCallable
                 mesh = generate_from_string(cyl_geo_str)
 
                 _vertices = mesh.leaf_view.vertices
@@ -2601,57 +2601,100 @@ Physical Surface(100) = {6, out[]};
 
                 zmin = 0.0 - self._variables_bempp["cyl_gap"]
                 zmax = self._length + self._variables_bempp["cyl_gap"]
+                cyl_th = 0.02
                 rmax = self._variables_bempp["cyl_id"] / 2.0
+                r_ap = self._variables_bempp["ap_id"] / 2.0
 
-                cyl_geo_str = """Geometry.NumSubEdges = 100; // nicer display of curve
+                h = self.get_bempp_parameter("grid_res")
+
+                plates_geo_str = """SetFactory("OpenCASCADE");
+Geometry.NumSubEdges = 100; // nicer display of curve
 Mesh.CharacteristicLengthMax = {};
-h = {};
-rmax = {};
-zmin = {};
-zmax = {};
-len = zmax - zmin;
-            """.format(0.005, 0.005, rmax, zmin, zmax)  # TODO: Make this a variable (mesh size)
-                cyl_geo_str += """
-Point(1) = { 0, 0, zmin, h };
-Point(2) = {rmax,0,zmin,h};
-Point(3) = {0,rmax,zmin,h};
-Point(4) = {-rmax,0,zmin,h};
-Point(5) = {0,-rmax,zmin,h};
+            """.format(h)
+                plates_geo_str += "// Entrance Plate \n"
+                plates_geo_str += "Cylinder(1) = {{ 0, 0, {}, 0, 0, {}, {}, 2 * Pi }};\n".format(zmin - cyl_th,
+                                                                                                 cyl_th,
+                                                                                                 rmax)
+                plates_geo_str += "Cylinder(2) = {{ 0, 0, {}, 0, 0, {}, {}, 2 * Pi }};\n".format(zmin - cyl_th - 0.001,
+                                                                                                 cyl_th + 0.002,
+                                                                                                 r_ap)
+                plates_geo_str += "BooleanDifference{ Volume{1}; Delete; }{ Volume{2}; Delete; }\n"
 
-Circle(1) = {2,1,3};
-Circle(2) = {3,1,4};
-Circle(3) = {4,1,5};
-Circle(4) = {5,1,2};
+                plates_geo_str += "// Exit Plate \n"
+                plates_geo_str += "Cylinder(2) = {{ 0, 0, {}, 0, 0, {}, {}, 2 * Pi }};\n".format(zmax - cyl_th,
+                                                                                                 cyl_th,
+                                                                                                 rmax)
+                plates_geo_str += "Cylinder(3) = {{ 0, 0, {}, 0, 0, {}, {}, 2 * Pi }};\n".format(zmax - cyl_th - 0.001,
+                                                                                                 cyl_th + 0.002,
+                                                                                                 rmax)
 
-Line Loop(5) = {1,2,3,4};
-Plane Surface(6) = {5};
-
-entrance_plate[] = Extrude{0, 0, -0.005} { Surface {6}; };
-
-Point(106) = { 0, 0, zmax, h };
-Point(107) = {rmax,0,zmax,h};
-Point(108) = {0,rmax,zmax,h};
-Point(109) = {-rmax,0,zmax,h};
-Point(110) = {0,-rmax,zmax,h};
-
-Circle(107) = {107,106,108};
-Circle(108) = {108,106,109};
-Circle(109) = {109,106,110};
-Circle(110) = {110,106,107};
-
-Line Loop(111) = {-107,-108,-109,-110};
-Plane Surface(112) = {111};
-
-exit_plate[] = Extrude{0, 0, 0.005} { Surface {112}; };
-
-Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
+                plates_geo_str += """
+s() = Surface "*";
+Physical Surface(100) = { s() };
 """
-                # noinspection PyCallingNonCallable
-                if self._debug:
-                    with open("cyl_str.geo", "w") as _of:
-                        _of.write(cyl_geo_str)
 
-                mesh = generate_from_string(cyl_geo_str)
+                if self._temp_dir is None:
+
+                    # noinspection PyCallingNonCallable
+                    mesh = generate_from_string(plates_geo_str)
+
+                else:
+
+                    geo_fn = os.path.join(tmp_dir, "plates_{}.geo".format(self.vane_type))
+                    msh_fn = os.path.splitext(geo_fn)[0] + ".msh"
+                    stl_fn = os.path.splitext(geo_fn)[0] + ".stl"
+                    brep_fn = os.path.splitext(geo_fn)[0] + ".brep"
+                    refine_fn = os.path.join(tmp_dir, "refine_{}.geo".format(self.vane_type))
+
+                    with open(geo_fn, "w") as _of:
+                        _of.write(plates_geo_str)
+
+                    gmsh_success = 0
+
+                    command = "{} \"{}\" -0 -o \"{}\" -format brep".format(GMSH_EXE, geo_fn, brep_fn)
+                    if self._debug:
+                        print("Running", command)
+                        sys.stdout.flush()
+                    gmsh_success += os.system(command)
+
+                    refine_str = """
+Merge "{}";
+Mesh.SecondOrderLinear = 0;
+RefineMesh;
+""".format(msh_fn)
+
+                    with open(refine_fn, "w") as _of:
+                        _of.write(refine_str)
+
+                    # TODO: Could we use higher order (i.e. curved) meshes? -DW
+                    # For now, we need to save in msh2 format for BEMPP compability
+                    command = "{} \"{}\" -2 -o \"{}\" -format msh2".format(GMSH_EXE, geo_fn, msh_fn)
+                    if self._debug:
+                        print("Running", command)
+                        sys.stdout.flush()
+                    gmsh_success += os.system(command)
+
+                    for i in range(self._mesh_params["refine_steps"]):
+                        command = "{} \"{}\" -0 -o \"{}\" -format msh2".format(GMSH_EXE, refine_fn, msh_fn)
+                        if self._debug:
+                            print("Running", command)
+                            sys.stdout.flush()
+                        gmsh_success += os.system(command)
+
+                    # --- TODO: For testing: save stl mesh file also
+                    command = "{} \"{}\" -0 -o \"{}\" -format stl".format(GMSH_EXE, msh_fn, stl_fn)
+                    if self._debug:
+                        print("Running", command)
+                        sys.stdout.flush()
+                    gmsh_success += os.system(command)
+                    # --- #
+
+                    if gmsh_success != 0:  # or not os.path.isfile("shape.stl"):
+                        print("Something went wrong with gmsh, be sure you defined "
+                              "the correct path at the beginning of the file!")
+                        return 1
+
+                    mesh = bempp.api.import_grid(msh_fn)
 
                 _vertices = mesh.leaf_view.vertices
                 _elements = mesh.leaf_view.elements
@@ -3232,8 +3275,8 @@ if __name__ == "__main__":
     myfn = "PARMTEQOUT_mod.TXT"
 
     r_vane = 0.0093
-    h_vane = 0.08
-    nz = 1000
+    h_vane = 0.05
+    nz = 750
 
     # --- Jungbae's RFQ Design with RMS section
     myrfq = PyRFQ(voltage=22000.0, fudge_vanes=True, debug=mydebug)
@@ -3262,7 +3305,7 @@ if __name__ == "__main__":
     # TODO: Maybe think about ap and m in context of trapezoidal rebuncher
     # TODO: Maybe frame TRC in TCS's?
     myrfq.append_cell(cell_type="trapezoidal",
-                      a=0.0095691183,
+                      a='auto',
                       m=1.5,
                       L=0.075,
                       fillet_radius=2 * r_vane)  # Needs to be larger than r_vane for sweep
@@ -3296,9 +3339,9 @@ if __name__ == "__main__":
     # TODO: Idea: Make ElectrodeObject class from which other electrodes inherit?
     # TODO: Idea: Make ElectrostaticSolver class that can be reused (e.g. for Spiral Inflector)?
     myrfq.set_bempp_parameter("add_endplates", False)  # TODO: Correct handling of OCC objects for endplates
-    myrfq.set_bempp_parameter("cyl_id", 0.1)
+    myrfq.set_bempp_parameter("cyl_id", 0.12)
     myrfq.set_bempp_parameter("reverse_mesh", True)
-    myrfq.set_bempp_parameter("grid_res", 0.001)  # characteristic mesh size during initial meshing
+    myrfq.set_bempp_parameter("grid_res", 0.005)  # characteristic mesh size during initial meshing
     myrfq.set_bempp_parameter("refine_steps", 0)  # number of times gmsh is called to "refine by splitting"
 
     myrfq.set_geometry_parameter("vane_radius", r_vane)
@@ -3341,7 +3384,8 @@ if __name__ == "__main__":
         print("Solving BEMPP took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
     ts = time.time()
-    myres = [0.001, 0.001, 0.001]
+    _myres = 0.005
+    myres = [_myres, _myres, _myres]
     rlim = 0.01
     xlims = (-rlim, rlim)
     ylims = (-rlim, rlim)
