@@ -2749,7 +2749,7 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
                                      debug=self._debug,
                                      occ_tolerance=self._occ_tolerance))
 
-        self._vanes.append(PyRFQVane(self,
+        self._vanes.append(PyRFQVane(parent_rfq=self,
                                      vane_type="xp",
                                      cells=self._cells,
                                      voltage=-self._voltage + self._variables_bempp["pot_shift"],
@@ -2907,13 +2907,13 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
         sys.stdout.flush()
         vane.calculate_profile(fudge=self._fudge_vanes)
 
-        # print("Proc {} generating geo string".format(RANK))
-        # sys.stdout.flush()
-        # vane.generate_geo_str(dx=dx, h=h,
-        #                       symmetry=False, mirror=False)
-        #
-        # print("Proc {} 'generate_vanes_worker' done.".format(RANK))
-        # sys.stdout.flush()
+        print("Proc {} generating geo string".format(RANK))
+        sys.stdout.flush()
+        vane.generate_geo_str(dx=dx, h=h,
+                              symmetry=False, mirror=False)
+
+        print("Proc {} 'generate_vanes_worker' done.".format(RANK))
+        sys.stdout.flush()
 
         return vane
 
