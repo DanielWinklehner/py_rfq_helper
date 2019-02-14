@@ -2648,18 +2648,20 @@ Physical Surface(100) = { s() };
 ReverseMesh Surface { s() };
                 """
 
-                if self.temp_dir is None:
+                tmp_dir = self.temp_dir
+
+                if tmp_dir is None:
 
                     # noinspection PyCallingNonCallable
                     mesh = generate_from_string(plates_geo_str)
 
                 else:
 
-                    geo_fn = os.path.join(tmp_dir, "plates_{}.geo".format(self.vane_type))
+                    geo_fn = os.path.join(tmp_dir, "plates.geo")
                     msh_fn = os.path.splitext(geo_fn)[0] + ".msh"
                     stl_fn = os.path.splitext(geo_fn)[0] + ".stl"
                     brep_fn = os.path.splitext(geo_fn)[0] + ".brep"
-                    refine_fn = os.path.join(tmp_dir, "refine_{}.geo".format(self.vane_type))
+                    refine_fn = os.path.join(tmp_dir, "refine_plates.geo")
 
                     with open(geo_fn, "w") as _of:
                         _of.write(plates_geo_str)
@@ -3289,7 +3291,7 @@ End Sub
 
 if __name__ == "__main__":
 
-    mydebug = False
+    mydebug = True
     myfn = "PARMTEQOUT_mod.TXT"
 
     r_vane = 0.0093
