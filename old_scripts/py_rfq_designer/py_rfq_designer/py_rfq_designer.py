@@ -21,7 +21,6 @@ import os
 import sys
 import shutil
 
-from py_electrodes import ElectrodeObject
 from matplotlib.patches import Arc as Arc
 
 load_previous = False
@@ -87,12 +86,14 @@ try:
     from OCC.Core.TColgp import TColgp_HArray1OfPnt2d, TColgp_Array1OfPnt2d
     from OCCUtils.Common import *
 
+    from py_electrodes import ElectrodeObject
+
     HAVE_OCC = True
 
 except ImportError:
 
+    ElectrodeObject = None
     print("Something went wrong during OCC import. No CAD support possible!")
-    print("ALL IMPORTS DONE")
     
 USE_MULTIPROC = True  # In case we are not using mpi or only using 1 processor, fall back on multiprocessing
 NO_MESH = False  # Debug flag for omitting the gmsh/BEMPP mesh generation
@@ -110,7 +111,7 @@ if RANK == 0:
 else:
     
     colors = None
-    
+
 decimals = 12
 
 __author__ = "Daniel Winklehner, Siddhartha Dechoudhury"
@@ -372,53 +373,102 @@ class Polygon2D(object):
 
 
 class PyRFQCell(object):
+
     def __init__(self,
                  cell_type,
-                 aperture,
-                 modulation,
-                 length,
-                 flip_z,
-                 shift_cell_no,
-                 fillet_radius=None,
                  prev_cell=None,
                  next_cell=None,
-                 debug=False):
+                 debug=False,
+                 **kwargs):
+        """
+        :param cell_type:
+                STA: Start cell without length (necessary at beginning of RMS if there are no previous cells)
+                RMS: Radial Matching Section.
+                NCS: Normal Cell. A regular RFQ cell
+                TCS: Transition Cell.
+                DCS: Drift Cell. No modulation.
+                TRC: Trapezoidal cell (experimental, for re-bunching only!).
+        :param prev_cell:
+        :param next_cell:
+        :param debug:
 
-        assert cell_type in ["STA", "RMS", "NCS", "TCS", "DCS", "TRC"], \
-            "cell_type must be one of STA, RMS, NCS, TCS, DCS, TRC!"
+        Keyword Arguments (mostly from Parmteq Output File):
+        V:       Intervane voltage in V
+        Wsyn:    Energy of the synchronous particle in MeV
+        Sig0T:   Transverse zero-current phase advance in degrees per period
+        Sig0L:   Longitudinal zero-current phase advance in degrees per period
+        A10:     Acceleration term [first theta-independent term in expansion]
+        Phi:     Synchronous phase in degrees
+        a:       Minimum radial aperture in m
+        m:       Modulation (dimensionless)
+        B:       Focusing parameter (dimensionless) B = q V lambda^2/(m c^2 r0^2)
+        L:       Cell length in cm
+        A0:      Quadrupole term [first z-independent term in expansion]
+        RFdef:   RF defocusing term
+        Oct:     Octupole term
+        A1:      Duodecapole term [second z-independent term in expansion]
+        """
 
-        self._debug = debug
+        assert cell_type in ["start", "rms", "regular",
+                             "transition", "transition_auto", "drift", "trapezoidal"], \
+            "cell_type not recognized!"
+
         self._type = cell_type
-        self._aperture = np.round(aperture, decimals)
-        self._modulation = np.round(modulation, decimals)
-        self._length = np.round(length, decimals)
-        self._flip_z = flip_z
-        self._shift_cell_no = shift_cell_no
-        self._fillet_radius = fillet_radius
-        self._profile_itp = None  # Interpolation of the cell profile
+
+        self._params = {"voltage": None,
+                        "Wsyn": None,
+                        "Sig0T": None,
+                        "Sig0L": None,
+                        "A10": None,
+                        "Phi": None,
+                        "a": None,
+                        "m": None,
+                        "B": None,
+                        "L": None,
+                        "A0": None,
+                        "RFdef": None,
+                        "Oct": None,
+                        "A1": None,
+                        "flip_z": False,
+                        "shift_cell_no": False,
+                        "fillet_radius":None
+                        }
+
         self._prev_cell = prev_cell
         self._next_cell = next_cell
+
+        self._debug = debug
+        
+        for key, item in self._params.items():
+            if key in kwargs.keys():
+                self._params[key] = kwargs[key]
+        
+        if self.initialize() != 0:
+            print("Cell failed self-check! Aborting.")
+            exit(1)
+    
+        self._profile_itp = None  # Interpolation of the cell profile
 
     def __str__(self):
         return "Type: '{}', Aperture: {:.6f}, Modulation: {:.4f}, " \
                "Length: {:.6f}, flip: {}, shift: {}".format(self._type,
-                                                            self._aperture,
-                                                            self._modulation,
-                                                            self._length,
-                                                            self._flip_z,
-                                                            self._shift_cell_no)
+                                                            self._params["a"],
+                                                            self._params["m"],
+                                                            self._params["L"],
+                                                            self._params["flip_z"],
+                                                            self._params["shift_cell_no"])
 
     @property
     def length(self):
-        return self._length
+        return self._params["L"]
 
     @property
     def aperture(self):
-        return self._aperture
+        return self._params["a"]
 
     @property
     def avg_radius(self):
-        return 0.5 * (self._aperture + self._modulation * self._aperture)
+        return 0.5 * (self._params["a"] + self._params["m"] * self._params["a"])
 
     @property
     def cell_type(self):
@@ -426,7 +476,7 @@ class PyRFQCell(object):
 
     @property
     def modulation(self):
-        return self._modulation
+        return self._params["m"]
 
     @property
     def prev_cell(self):
@@ -438,9 +488,9 @@ class PyRFQCell(object):
 
     def calculate_transition_cell_length(self):
 
-        le = self._length
-        m = self._modulation
-        a = self._aperture
+        le = self._params["L"]
+        m = self._params["m"]
+        a = self._params["a"]
         r0 = self.avg_radius
         k = np.pi / np.sqrt(3.0) / le
 
@@ -454,13 +504,76 @@ class PyRFQCell(object):
 
         k = root(func, k).x[0]
         tcs_length = np.pi / 2.0 / k
+
         print("Transition cell has length {} which is {} * cell length, ".format(tcs_length, tcs_length / le), end="")
-        print("the remainder will be filled with a drift.")
 
         assert tcs_length <= le, "Numerical determination of transition cell length " \
                                  "yielded value larger than cell length parameter!"
 
-        return np.pi / 2.0 / k
+        if tcs_length > le:
+            print("the remainder will be filled with a drift.")
+
+        return tcs_length
+
+    def initialize(self):
+        # TODO: Refactor this maybe? seems overly complicated...
+        # Here we check the different cell types for consistency and minimum necessary parameters
+        if self._type in ["transition", "transition_auto"]:
+            assert self.prev_cell is not None, "A transition cell needs a preceeeding cell."
+            assert self.prev_cell.cell_type == "regular", "Currently a transition cell must follow a regular cell."
+
+        # Aperture:
+        assert self._params["a"] is not None, "No aperture given for {} cell".format(self._type)
+
+        if self._params["a"] == 'auto':
+
+            assert self._type in ["drift", "trapezoidal", "transition", "transition_auto"], \
+                "Unsupported cell type '{}' for auto-aperture".format(self._type)
+
+            assert self.prev_cell is not None, "Need a preceeding cell for auto aperture!"
+
+            if self.prev_cell.cell_type in ["transition", "transition_auto"]:
+                self._params["a"] = self.prev_cell.avg_radius
+            else:
+                self._params["a"] = self.prev_cell.aperture
+
+        self._params["a"] = np.round(self._params["a"], decimals)
+
+        # Modulation:
+        if self._type in ["start", "rms", "drift"]:
+
+            self._params["m"] = 1.0
+
+        assert self._params["m"] is not None, "No modulation given for {} cell".format(self._type)
+
+        if self._params["m"] == 'auto':
+
+            assert self._type in ["transition", "transition_auto"], \
+                "Only transition cell can have 'auto' modulation at the moment!"
+
+            self._params["m"] = self.prev_cell.modulation
+
+        self._params["m"] = np.round(self._params["m"], decimals)
+
+        # Length:
+        if self._type == "start":
+
+            self._params["L"] = 0.0
+
+        assert self._params["L"] is not None, "No length given for {} cell".format(self._type)
+
+        if self._params["L"] == "auto":
+            assert self._type == "transition_auto", "Only transition_auto cells allow auto-length!"
+
+            self._params["L"] = self.prev_cell.length  # use preceeding cell length L for calculation of L'
+            self._params["L"] = self.calculate_transition_cell_length()
+
+        self._params["L"] = np.round(self._params["L"], decimals)
+
+        if self._type == "trapezoidal":
+            assert self._params["fillet_radius"] is not None, "For 'TRC' cell a fillet radius must be given!"
+
+        return 0
 
     def set_prev_cell(self, prev_cell):
         assert isinstance(prev_cell, PyRFQCell), "You are trying to set a PyRFQCell with a non-cell object!"
@@ -470,10 +583,124 @@ class PyRFQCell(object):
         assert isinstance(next_cell, PyRFQCell), "You are trying to set a PyRFQCell with a non-cell object!"
         self._next_cell = next_cell
 
-    def calculate_profile_trc(self, vane_type):
+    def calculate_profile_rms(self, vane_type, cell_no):
+        # Assemble RMS section by finding adjacent RMS cells and get their apertures
+        cc = self
+        pc = cc.prev_cell
+
+
+        rms_cells = [cc]
+        shift = 0.0
+
+        while pc is not None and pc.cell_type == "rms":
+            rms_cells = [pc] + rms_cells
+            shift += pc.length
+
+            cc = pc
+            pc = cc.prev_cell
+
+        cc = self
+        nc = cc._next_cell
+
+        while nc is not None and nc.cell_type == "rms":
+            rms_cells = rms_cells + [nc]
+            cc = nc
+            nc = cc.next_cell
+
+        # Check for starting cell
+        assert rms_cells[0].prev_cell is not None, "Cannot assemble RMS section without a preceding cell! " \
+                                                   "At the beginning ofthe RFQ consider using a start (STA) cell."
+
+        a = [0.5 * rms_cells[0].prev_cell.aperture * (1.0 + rms_cells[0].prev_cell.modulation)]
+        z = [0.0]
+
+        for _cell in rms_cells:
+            a.append(_cell.aperture)
+            z.append(z[-1] + _cell.length)
+
+        self._profile_itp = interp1d(np.array(z) - shift, np.array(a), kind='cubic')
+
+        return 0
+
+    def calculate_profile_transition(self, vane_type, cell_no):
+
+        le = self._params["L"]
+        m = self._params["m"]
+        a = self._params["a"]
+        k = np.pi / np.sqrt(3.0) / le  # Initial guess
+        r0 = 0.5 * (a + m * a)
+
+        if self.cell_type == "transition_auto":
+            tcl = le
+        else:
+            tcl = self.calculate_transition_cell_length()
+
+        z = np.linspace(0.0, le, 200)
+
+        idx = np.where(z <= tcl)
+
+        vane = np.ones(z.shape) * r0
+
+        print("Average radius of transition cell (a + ma) / 2 = {}".format(r0))
+
+        def eta(kk):
+            return bessel1(0.0, kk * r0) / (3.0 * bessel1(0.0, 3.0 * kk * r0))
+
+        def a10(kk):
+            return ((m * a / r0) ** 2.0 - 1.0) / (
+                    bessel1(0.0, kk * m * a) + eta(kk) * bessel1(0.0, 3.0 * kk * m * a))
+
+        def a30(kk):
+            return eta(kk) * a10(kk)
+
+        def func(kk):
+            return (bessel1(0.0, kk * m * a) + eta(kk) * bessel1(0.0, 3.0 * kk * m * a)) / \
+                   (bessel1(0.0, kk * a) + eta(kk) * bessel1(0.0, 3.0 * kk * a)) \
+                   + ((m * a / r0) ** 2.0 - 1.0) / ((a / r0) ** 2.0 - 1.0)
+
+        k = root(func, k).x[0]
+
+        if self._params["shift_cell_no"]:
+            sign = (-1.0) ** (cell_no + 1)
+        else:
+            sign = (-1.0) ** cell_no
+
+        _vane = []
+
+        if "x" in vane_type:
+
+            def vane_x(xx):
+                return - (xx / r0) ** 2.0 \
+                       + sign * a10(k) * bessel1(0.0, k * xx) * np.cos(k * _z) \
+                       + sign * a30(k) * bessel1(0.0, 3.0 * k * xx) * np.cos(3.0 * k * _z) + 1.0
+
+            for _z in z[idx]:
+                _vane.append(root(vane_x, r0).x[0])
+
+        else:
+
+            def vane_y(yy):
+                return + (yy / r0) ** 2.0 \
+                       + sign * a10(k) * bessel1(0.0, k * yy) * np.cos(k * _z) \
+                       + sign * a30(k) * bessel1(0.0, 3.0 * k * yy) * np.cos(3.0 * k * _z) - 1.0
+
+            for _z in z[idx]:
+                _vane.append(root(vane_y, r0).x[0])
+
+        if self._params["flip_z"]:
+            _vane = _vane[::-1]
+            vane[np.where(z >= le - tcl)] = _vane
+        else:
+            vane[idx] = _vane
+
+        self._profile_itp = interp1d(z, vane, bounds_error=False, fill_value=0)
+
+        return 0
+
+    def calculate_profile_trapezoidal(self, vane_type, cell_no):
         # TODO: This is a rough test of a trapezoidal cell: _/-\_
         # TODO: tilted parts are as long as roof and start and end (cell_length/5)
-        fillet_radius = self._fillet_radius  # m
+        fillet_radius = self._params["fillet_radius"]  # m
 
         def intersection(_p1, _v1, _p2, _v2):
             s = (_v2[1] * (_p2[0] - _p1[0]) + _v2[0] * (_p1[1] - _p2[1])) / (_v1[0] * _v2[1] - _v1[1] * _v2[0])
@@ -550,26 +777,26 @@ class PyRFQCell(object):
             return polygon, p1, p2
 
         # Flip for y vane
-        flip_r = ("y" in vane_type) ^ self._shift_cell_no
+        flip_r = ("y" in vane_type) ^ self._params["shift_cell_no"]
 
         # 6 vertices for 5 segments of the trapezoidal cell
-        _z = np.linspace(0, self._length, 6, endpoint=True)
+        _z = np.linspace(0, self._params["L"], 6, endpoint=True)
 
         if flip_r:
-            _r = np.array([self._aperture,
-                           self._aperture,
-                           self._aperture * (2.0 - self._modulation),
-                           self._aperture * (2.0 - self._modulation),
-                           self._aperture,
-                           self._aperture
+            _r = np.array([self._params["a"],
+                           self._params["a"],
+                           self._params["a"] * (2.0 - self._params["m"]),
+                           self._params["a"] * (2.0 - self._params["m"]),
+                           self._params["a"],
+                           self._params["a"]
                            ])
         else:
-            _r = np.array([self._aperture,
-                           self._aperture,
-                           self._aperture * self._modulation,
-                           self._aperture * self._modulation,
-                           self._aperture,
-                           self._aperture
+            _r = np.array([self._params["a"],
+                           self._params["a"],
+                           self._params["a"] * self._params["m"],
+                           self._params["a"] * self._params["m"],
+                           self._params["a"],
+                           self._params["a"]
                            ])
 
         # Now we replace the inner vertices with fillets
@@ -601,217 +828,63 @@ class PyRFQCell(object):
                                           fillet_radius,
                                           not clockwise)
 
-            # _new_verts.add_point((v_new1[0], v_new1[1]))
             _new_verts.add_polygon(arcpoly)
-            # _new_verts.add_point((v_new2[0], v_new2[1]))
-
-            # ax.add_artist(Arc((m_center[0], m_center[1]),
-            #               2.0 * fillet_radius, 2.0 * fillet_radius, 0.0,
-            #               ps, pe,
-            #               color='red'))
 
         _new_verts.add_point(tuple(_vertices[-1]))
         _new_verts = np.array(_new_verts[:])
-
-        # if RANK == 0:
-        #     fig, ax = plt.subplots()
-        #     plt.scatter(_vertices[:, 0], _vertices[:, 1], c="blue")
-        #     plt.plot(_new_verts[:, 0], _new_verts[:, 1], c="red")
-        #     ax.set_aspect("equal")
-        #     plt.show()
 
         self._profile_itp = interp1d(_new_verts[:, 0], _new_verts[:, 1])
 
         return 0
 
     def calculate_profile(self, cell_no, vane_type, fudge=False):
+
         print("cell_no: " + str(cell_no))
+
         assert vane_type in ["xp", "xm", "yp", "ym"], "Did not understand vane type {}".format(vane_type)
 
-        if self._type == "STA":
+        if self._type == "start":
             # Don't do anything for start cell
             return 0
 
-        elif self._type == "TRC":
-            assert self._prev_cell.cell_type == "DCS", "Rebunching cell must follow a drift cell (DCS)!"
-            self.calculate_profile_trc(vane_type)
-            return 0
+        elif self._type == "trapezoidal":
 
-        elif self._type == "DCS":
-            self._profile_itp = interp1d([0.0, self._length],
-                                         [self._aperture, self._aperture * self._modulation])
-            return 0
-
-        elif self._type == "RMS":
-
-            # Find adjacent RMS cells and get their apertures
-            cc = self
-            pc = cc.prev_cell
-            # a = [cc.aperture]
-            # z = [cc.length]
-
-            # Assemble RMS section:
-            rms_cells = [cc]
-            shift = 0.0
-
-            while pc is not None and pc.cell_type == "RMS":
-                rms_cells = [pc] + rms_cells
-                shift += pc.length
-
-                cc = pc
-                pc = cc.prev_cell
-
-            cc = self
-            nc = cc._next_cell
-
-            while nc is not None and nc.cell_type == "RMS":
-                rms_cells = rms_cells + [nc]
-                cc = nc
-                nc = cc.next_cell
-
-            # Check for starting cell
-            assert rms_cells[0].prev_cell is not None, "Cannot assemble RMS section without a preceding cell! " \
-                                                       "At the beginning ofthe RFQ consider using a start (STA) cell."
-
-            a = [0.5 * rms_cells[0].prev_cell.aperture * (1.0 + rms_cells[0].prev_cell.modulation)]
-            z = [0.0]
-
-            if self._debug:
-                print("RMS Section calculated for cell {}:".format(cell_no))
-                print(rms_cells[0].prev_cell)
-                for _cell in rms_cells:
-                    print(_cell)
-
-            for _cell in rms_cells:
-                a.append(_cell.aperture)
-                z.append(z[-1] + _cell.length)
-
-            # pc_is_rms = False
-            #
-            # if pc is not None:
-            #     pc_is_rms = (pc.cell_type in ["RMS", "STA"])
-            #
-            # while pc_is_rms and cc.cell_type != "STA":
-            #
-            #     a = [pc.aperture] + a
-            #     z = [z[0] - cc.length] + z
-            #
-            #     cc = pc
-            #     pc = pc.prev_cell
-            #
-            #     pc_is_rms = False
-            #
-            #     if pc is not None:
-            #         pc_is_rms = (pc.cell_type in ["RMS", "STA"])
-            #
-            # cc = self
-            # nc = cc._next_cell
-            #
-            # if nc is not None:
-            #     next_is_rms = (nc.cell_type == "RMS")
-            #
-            #     while next_is_rms:
-            #
-            #         a.append(nc.aperture)
-            #         z.append(z[-1] + nc.length)
-            #
-            #         nc = nc.next_cell
-            #
-            #         next_is_rms = False
-            #         if nc is not None:
-            #             next_is_rms = (nc.cell_type == "RMS")
-
-            print(np.array(z) - shift)
-            print(a)
-
-            self._profile_itp = interp1d(np.array(z) - shift, np.array(a), kind='cubic')
+            assert self._prev_cell.cell_type == "drift", "Rebunching cell must follow a drift cell (DCS)!"
+            self.calculate_profile_trapezoidal(vane_type, cell_no)
 
             return 0
 
-        elif self._type == "TCS":
+        elif self._type == "drift":
 
-            le = self._length
-            m = self._modulation
-            a = self._aperture
-            k = np.pi / np.sqrt(3.0) / le  # Initial guess
-            r0 = 0.5 * (a + m * a)
-
-            tcl = self.calculate_transition_cell_length()
-            z = np.linspace(0.0, le, 200)
-
-            idx = np.where(z <= tcl)
-
-            vane = np.ones(z.shape) * r0
-
-            print("Average radius of transition cell (a + ma) / 2 = {}".format(r0))
-
-            def eta(kk):
-                return bessel1(0.0, kk * r0) / (3.0 * bessel1(0.0, 3.0 * kk * r0))
-
-            def a10(kk):
-                return ((m * a / r0) ** 2.0 - 1.0) / (
-                        bessel1(0.0, kk * m * a) + eta(kk) * bessel1(0.0, 3.0 * kk * m * a))
-
-            def a30(kk):
-                return eta(kk) * a10(kk)
-
-            def func(kk):
-                return (bessel1(0.0, kk * m * a) + eta(kk) * bessel1(0.0, 3.0 * kk * m * a)) / \
-                       (bessel1(0.0, kk * a) + eta(kk) * bessel1(0.0, 3.0 * kk * a)) \
-                       + ((m * a / r0) ** 2.0 - 1.0) / ((a / r0) ** 2.0 - 1.0)
-
-            k = root(func, k).x[0]
-
-            if self._shift_cell_no:
-                sign = (-1.0) ** (cell_no + 1)
-            else:
-                sign = (-1.0) ** cell_no
-
-            _vane = []
-
-            if "x" in vane_type:
-
-                def vane_x(xx):
-                    return - (xx / r0) ** 2.0 \
-                           + sign * a10(k) * bessel1(0.0, k * xx) * np.cos(k * _z) \
-                           + sign * a30(k) * bessel1(0.0, 3.0 * k * xx) * np.cos(3.0 * k * _z) + 1.0
-
-                for _z in z[idx]:
-                    _vane.append(root(vane_x, r0).x[0])
-
-            else:
-
-                def vane_y(yy):
-                    return + (yy / r0) ** 2.0 \
-                           + sign * a10(k) * bessel1(0.0, k * yy) * np.cos(k * _z) \
-                           + sign * a30(k) * bessel1(0.0, 3.0 * k * yy) * np.cos(3.0 * k * _z) - 1.0
-
-                for _z in z[idx]:
-                    _vane.append(root(vane_y, r0).x[0])
-
-            if self._flip_z:
-                _vane = _vane[::-1]
-                vane[np.where(z >= le - tcl)] = _vane
-            else:
-                vane[idx] = _vane
-
-            self._profile_itp = interp1d(z, vane, bounds_error=False, fill_value=0)
+            self._profile_itp = interp1d([0.0, self._params["L"]],
+                                         [self._params["a"], self._params["a"] * self._params["m"]])
 
             return 0
 
-        z = np.linspace(0.0, self._length, 100)
+        elif self._type == "rms":
+
+            self.calculate_profile_rms(vane_type, cell_no)
+
+            return 0
+
+        elif self._type in ["transition", "transition_auto"]:
+
+            self.calculate_profile_transition(vane_type, cell_no)
+
+            return 0
+
+        # Else: regular cell:
+        z = np.linspace(0.0, self._params["L"], 100)
 
         a = self.aperture
         m = self.modulation
 
         pc = self._prev_cell
-        if pc is not None and pc.cell_type in ["RMS", "DCS"]:
+        if pc is not None and pc.cell_type in ["rms", "drift"]:
             pc = None
         nc = self._next_cell
-        if nc is not None and nc.cell_type in ["RMS", "DCS"]:
+        if nc is not None and nc.cell_type in ["rms", "drift"]:
             nc = None
-
-        # print("Cell No {}, prev: {}, next: {}".format(cell_no, pc, nc))
 
         if pc is None or not fudge:
             a_fudge_begin = ma_fudge_begin = 1.0
@@ -921,7 +994,7 @@ class PyRFQVane(object):
 
     @property
     def length(self):
-        return self._length  # type: float
+        return self.length  # type: float
 
     @property
     def mesh(self):
@@ -1364,10 +1437,10 @@ EndFor
         h_min = 0.0
         has_rms = False
         for _cell in self._cells:
-            if _cell.cell_type == "RMS":
+            if _cell.cell_type == "rms":
                 has_rms = True
             # Check for maximum modulated vanes plus 1 mm for safety.
-            if _cell.cell_type not in ["STA", "RMS"]:
+            if _cell.cell_type not in ["start", "rms"]:
                 _h = _cell.aperture * _cell.modulation + 0.001
                 if h_min < _h:
                     h_min = _h
@@ -1793,7 +1866,7 @@ RefineMesh;
         # count = 0
         for cell in self._cells:
 
-            if cell.cell_type != "STA":
+            if cell.cell_type != "start":
                 _z_end = np.round(cum_len + cell.length, decimals)
                 idx = np.where((z >= cum_len) & (z <= _z_end))
 
@@ -1822,95 +1895,15 @@ RefineMesh;
                  outside (on the surface is counted as inside!)
         """
 
-        # assert self._occ_params["bbox"] is not None, "Couldn't find bounding box for this vane!"
-        #
-        # global_pts = np.array(points)
-        #
-        # single = False
-        # if global_pts.shape == (3,):
-        #     single = True
-        #     global_pts = global_pts[np.newaxis, :]
-        #
-        # assert len(global_pts.shape) == 2 and global_pts.shape[1] == 3, "'points' has shape {}, " \
-        #                                                                 "when it should be shape (N, 3) for array, " \
-        #                                                                 "or (3,) for single point!".format(
-        #     global_pts.shape)
-        #
-        # # Divide points array into pieces to be worked on in parallel (if we have MPI)
-        # npts = global_pts.shape[0]
-        # pts_per_proc = int(npts / SIZE)
-        #
-        # start = RANK * pts_per_proc
-        # end = (RANK + 1) * pts_per_proc
-        #
-        # # Highest proc needs to make sure last point is included
-        # if RANK == SIZE - 1:
-        #     end = None
-        #
-        # local_pts = global_pts[start:end]
-        # n_loc_pts = local_pts.shape[0]
-        # local_mask = np.zeros(n_loc_pts, dtype=bool)
-        #
-        # if self._debug:
-        #     print("Host {}, proc {} of {}, local_pts =\n".format(HOST, RANK + 1, SIZE), local_pts)
-        #
-        # for i, point in enumerate(local_pts):
-        #
-        #     _x, _y, _z = point
-        #     pt = gp_Pnt(_x, _y, _z)
-        #
-        #     if not self._occ_params["bbox"].IsOut(pt):
-        #
-        #         # local_mask[i] = True
-        #         _in_solid = BRepClass3d_SolidClassifier(self._occ_params["solid"],
-        #                                                 pt,
-        #                                                 self._occ_params["tolerance"])
-        #
-        #         if _in_solid.State() in [TopAbs_ON, TopAbs_IN]:
-        #             # print("Point ({}/{}/{}/) is inside!".format(_x, _y, _z))
-        #             local_mask[i] = True
-        #
-        # if MPI is not None:
-        #     # Assemble global_mask on proc 0
-        #     if RANK == 0:
-        #         global_mask = np.zeros(npts, dtype=bool)
-        #         global_mask[0:pts_per_proc] = local_mask[:]
-        #
-        #         for proc in range(SIZE-1):
-        #
-        #             start = (proc + 1) * pts_per_proc
-        #             end = (proc + 2) * pts_per_proc
-        #
-        #             # Highest proc needs to make sure last point is included
-        #             if proc == SIZE - 2:
-        #                 end = None
-        #
-        #             global_mask[start:end] = COMM.recv(source=proc + 1)
-        #
-        #         mpi_data = {"global_mask": global_mask}
-        #
-        #     else:
-        #
-        #         COMM.send(local_mask, dest=0)
-        #         mpi_data = None
-        #
-        #     mask = COMM.bcast(mpi_data, root=0)["global_mask"]
-        #
-        # else:
-        #
-        #     mask = local_mask
-        #
-        # if single:
-        #     return mask[0]
-
         return self._elec.points_inside(points)
 
 
 # noinspection PyUnresolvedReferences
 class PyRFQ(object):
-    def __init__(self, voltage, occ_tolerance=1e-5, debug=False):
+    def __init__(self, voltage, occ_tolerance=1e-5, debug=False, fudge_vanes=False):
 
         self._debug = debug
+        self._fudge_vanes = fudge_vanes
         self._voltage = voltage
         self._vanes = []
         self._cells = []
@@ -2053,35 +2046,22 @@ class PyRFQ(object):
 
     def append_cell(self,
                     cell_type,
-                    aperture,
-                    modulation,
-                    length,
-                    fillet_radius=None,
-                    flip_z=False,
-                    shift_cell_no=False):
+                    **kwargs):
 
-        assert cell_type in ["STA", "RMS", "NCS", "TCS", "DCS", "TRC"], \
-            "cell_type must be one of STA, RMS, NCS, TCS, DCS, TRC!"
+        assert cell_type in ["start", "rms", "regular",
+                             "transition", "transition_auto", "drift", "trapezoidal"], \
+            "cell_type not recognized!"
 
         if len(self._cells) > 0:
             pc = self._cells[-1]
         else:
             pc = None
 
-        if cell_type == "TRC" and fillet_radius is None:
-            print("For 'TRC' cell a fillet radius must be given!")
-            exit()
-
         self._cells.append(PyRFQCell(cell_type=cell_type,
-                                     aperture=aperture,
-                                     modulation=modulation,
-                                     length=length,
-                                     flip_z=flip_z,
-                                     fillet_radius=fillet_radius,
-                                     shift_cell_no=shift_cell_no,
                                      prev_cell=pc,
                                      next_cell=None,
-                                     debug=self._debug))
+                                     debug=self._debug,
+                                     **kwargs))
 
         if len(self._cells) > 1:
             self._cells[-2].set_next_cell(self._cells[-1])
@@ -2153,14 +2133,15 @@ class PyRFQ(object):
                     if len(self._cells) == 0 and not ignore_rms:
                         # We use this only if there are no previous cells in the pyRFQ
                         # Else we ignore it...
-                        self._cells.append(PyRFQCell(cell_type="STA",
-                                                     aperture=params[6] * 0.01,
-                                                     modulation=params[7],
-                                                     length=0.0,
-                                                     flip_z=False,
-                                                     shift_cell_no=False,
-                                                     prev_cell=None,
-                                                     next_cell=None,
+                        self._cells.append(PyRFQCell(cell_type="start",
+                                                     V=params[0] * 1000.0,
+                                                     Wsyn=params[1],
+                                                     Sig0T=params[2],
+                                                     Sig0L=params[3],
+                                                     A10=params[4],
+                                                     Phi=params[5],
+                                                     a=params[6] * 0.01,
+                                                     B=params[8],
                                                      debug=self._debug))
 
                     continue
@@ -2170,28 +2151,53 @@ class PyRFQ(object):
                     print("Ignored cell {}".format(cell_no))
                     continue
 
-                if params[7] == 1.0:
-                    cell_type = "RMS"
+                if "R" in cell_no:
+                    cell_type = "rms"
                     if ignore_rms:
                         print("Ignored cell {}".format(cell_no))
                         continue
                 else:
-                    cell_type = "NCS"
+                    cell_type = "regular"
 
                 if len(self._cells) > 0:
                     pc = self._cells[-1]
                 else:
                     pc = None
 
-                self._cells.append(PyRFQCell(cell_type=cell_type,
-                                             aperture=params[6] * 0.01,
-                                             modulation=params[7],
-                                             length=params[9] * 0.01,
-                                             flip_z=False,
-                                             shift_cell_no=False,
-                                             prev_cell=pc,
-                                             next_cell=None,
-                                             debug=self._debug))
+                if cell_type == "rms":
+
+                    self._cells.append(PyRFQCell(cell_type=cell_type,
+                                                 V=params[0] * 1000.0,
+                                                 Wsyn=params[1],
+                                                 Sig0T=params[2],
+                                                 Sig0L=params[3],
+                                                 A10=params[4],
+                                                 Phi=params[5],
+                                                 a=params[6] * 0.01,
+                                                 m=params[7],
+                                                 B=params[8],
+                                                 L=params[9] * 0.01,
+                                                 prev_cell=pc,
+                                                 debug=self._debug))
+                else:
+
+                    self._cells.append(PyRFQCell(cell_type=cell_type,
+                                                 V=params[0] * 1000.0,
+                                                 Wsyn=params[1],
+                                                 Sig0T=params[2],
+                                                 Sig0L=params[3],
+                                                 A10=params[4],
+                                                 Phi=params[5],
+                                                 a=params[6] * 0.01,
+                                                 m=params[7],
+                                                 B=params[8],
+                                                 L=params[9] * 0.01,
+                                                 A0=params[11],
+                                                 RFdef=params[12],
+                                                 Oct=params[13],
+                                                 A1=params[14],
+                                                 prev_cell=pc,
+                                                 debug=self._debug))
 
                 if len(self._cells) > 1:
                     self._cells[-2].set_next_cell(self._cells[-1])
@@ -2202,6 +2208,8 @@ class PyRFQ(object):
         return 0
 
     def read_input_vecc(self, filename, ignore_rms):
+        print("Loading from VECC files is currently not supported (function needs to be mofernized)!")
+        exit(1)
 
         with open(filename, "r") as infile:
 
@@ -2210,11 +2218,11 @@ class PyRFQ(object):
                 params = [float(item) for item in line.strip().split()]
 
                 if params[4] == 1.0:
-                    cell_type = "RMS"
+                    cell_type = "rms"
                     if ignore_rms:
                         continue
                 else:
-                    cell_type = "NCS"
+                    cell_type = "regular"
 
                 if len(self._cells) > 0:
                     pc = self._cells[-1]
@@ -2804,8 +2812,6 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
 
         COMM.barrier()
 
-
-
         if RANK == 0:
             print("Generating openCascade model of the vanes.")
             sys.stdout.flush()
@@ -2820,7 +2826,7 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
                     self._vanes[i] = self.generate_brep_worker(_vane)
 
         elif SIZE >= 4:
-            # We have 4 or moreprocs and can use a single processor per vane
+            # We have 4 or more procs and can use a single processor per vane
 
             if RANK <= 3:
                 # Generate on proc 0-3
@@ -2899,15 +2905,15 @@ Physical Surface(100) = {6, 112, -entrance_plate[], -exit_plate[]};
 
         print("Proc {} calculating vane profile".format(RANK))
         sys.stdout.flush()
-        vane.calculate_profile(fudge=True)
+        vane.calculate_profile(fudge=self._fudge_vanes)
 
-        print("Proc {} generating geo string".format(RANK))
-        sys.stdout.flush()
-        vane.generate_geo_str(dx=dx, h=h,
-                              symmetry=False, mirror=False)
-
-        print("Proc {} 'generate_vanes_worker' done.".format(RANK))
-        sys.stdout.flush()
+        # print("Proc {} generating geo string".format(RANK))
+        # sys.stdout.flush()
+        # vane.generate_geo_str(dx=dx, h=h,
+        #                       symmetry=False, mirror=False)
+        #
+        # print("Proc {} 'generate_vanes_worker' done.".format(RANK))
+        # sys.stdout.flush()
 
         return vane
 
@@ -3222,125 +3228,68 @@ End Sub
 
 if __name__ == "__main__":
 
+    mydebug = False
+    myfn = "PARMTEQOUT_mod.TXT"
+
     r_vane = 0.0093
     h_vane = 0.08
-    nz = 500
-
-    # myfn = "PARMTEQOUT_14Cells.TXT"
-    """
-    myfn = "PARMTEQOUT.TXT"
-
-    myrfq = PyRFQ(voltage=22000.0, debug=True)
-
-    # Since we're ignoring the RMS, we add a short transition cell that is flipped in z and x
-    myrfq.append_cell(cell_type="TCS",
-                      aperture=0.009709,
-                      modulation=1.0019,
-                      length=0.05,
-                      flip_z=True,
-                      shift_cell_no=True)
-
-    # Load the base RFQ design from the parmteq file
-    if myrfq.add_cells_from_file(filename=myfn, ignore_rms=True) != 0:
-        exit()
-
-    # - These are for loading the full parmteq file (not needed for the 14 cell test file) - #
-    myrfq.append_cell(cell_type="TCS",
-                      aperture=0.006837,
-                      modulation=1.6778,
-                      length=0.032727)
-   
-    myrfq.append_cell(cell_type="DCS",
-                      aperture=0.0091540593,
-                      modulation=1.0,
-                      length=0.14)
-    # --- For testing, we create an RFQ 'from scratch' that just --- #
-    # --- has a start cell, a drift and a trapezoidal cell       --- #
-    myrfq = PyRFQ(voltage=22000.0, debug=True)
-
-    # Start Cell
-    myrfq.append_cell(cell_type="STA",
-                      aperture=0.01,
-                      modulation=1.0,
-                      length=0.0)
-
-    # Drift Cell
-    myrfq.append_cell(cell_type="DCS",
-                      aperture=0.01,
-                      modulation=1.0,
-                      length=0.05)
-
-    # Trapezoidal Rebunching Cell
-    myrfq.append_cell(cell_type="TRC",
-                      aperture=0.01,
-                      modulation=2.0,
-                      length=0.1,
-                      fillet_radius=0.025)
-    """
+    nz = 1000
 
     # --- Jungbae's RFQ Design with RMS section
-    myrfq = PyRFQ(voltage=22000.0, debug=True)
+    myrfq = PyRFQ(voltage=22000.0, fudge_vanes=True, debug=mydebug)
 
-    # myrfq.append_cell(cell_type="STA",
+    # myrfq.append_cell(cell_type="start",
     #                   aperture=0.009709,
     #                   modulation=1.0,
     #                   length=0.0)
 
     # Load the base RFQ design from the parmteq file
-    myfn = "PARMTEQOUT_mod.TXT"
-    if myrfq.add_cells_from_file(filename=myfn, ignore_rms=False) != 0:
+    if myrfq.add_cells_from_file(filename=myfn,
+                                 ignore_rms=False) != 0:
         exit()
 
-    # Transition cell is
-    # TODO: Make transition cells "auto"-aperture/modulation/length
-    myrfq.append_cell(cell_type="TCS",
-                      aperture=0.007147,
-                      modulation=1.6778,
-                      length=0.032727)
+    # Transition cell
+    myrfq.append_cell(cell_type="transition_auto",
+                      a='auto',
+                      m='auto',
+                      L='auto')
 
-    myrfq.append_cell(cell_type="DCS",
-                      aperture=0.0095691183,
-                      modulation=1.0,
-                      length=0.02)
+    myrfq.append_cell(cell_type="drift",
+                      a='auto',
+                      L=0.02)
 
     # Trapezoidal Rebunching Cell
     # TODO: Maybe think about ap and m in context of trapezoidal rebuncher
     # TODO: Maybe frame TRC in TCS's?
-    myrfq.append_cell(cell_type="TRC",
-                      aperture=0.0095691183,
-                      modulation=1.5,
-                      length=0.075,
+    myrfq.append_cell(cell_type="trapezoidal",
+                      a=0.0095691183,
+                      m=1.5,
+                      L=0.075,
                       fillet_radius=2 * r_vane)  # Needs to be larger than r_vane for sweep
 
-    myrfq.append_cell(cell_type="DCS",
-                      aperture=0.0095691183,
-                      modulation=1.0,
-                      length=0.02)
+    myrfq.append_cell(cell_type="drift",
+                      a='auto',
+                      L=0.02)
 
-    myrfq.append_cell(cell_type="RMS",
-                      aperture=0.009718,
-                      modulation=1.0,
-                      length=0.018339)
+    myrfq.append_cell(cell_type="rms",
+                      a=0.009718,
+                      L=0.018339)
 
-    myrfq.append_cell(cell_type="RMS",
-                      aperture=0.010944,
-                      modulation=1.0,
-                      length=0.018339)
+    myrfq.append_cell(cell_type="rms",
+                      a=0.010944,
+                      L=0.018339)
 
-    myrfq.append_cell(cell_type="RMS",
-                      aperture=0.016344,
-                      modulation=1.0,
-                      length=0.018339)
+    myrfq.append_cell(cell_type="rms",
+                      a=0.016344,
+                      L=0.018339)
 
-    myrfq.append_cell(cell_type="RMS",
-                      aperture=0.041051,
-                      modulation=1.0,
-                      length=0.018339)
+    myrfq.append_cell(cell_type="rms",
+                      a=0.041051,
+                      L=0.018339)
 
-    myrfq.append_cell(cell_type="RMS",
-                      aperture=0.15,
-                      modulation=1.0,
-                      length=0.018339)
+    myrfq.append_cell(cell_type="rms",
+                      a=0.15,
+                      L=0.018339)
 
     print(myrfq)
 
@@ -3349,7 +3298,7 @@ if __name__ == "__main__":
     myrfq.set_bempp_parameter("add_endplates", False)  # TODO: Correct handling of OCC objects for endplates
     myrfq.set_bempp_parameter("cyl_id", 0.1)
     myrfq.set_bempp_parameter("reverse_mesh", True)
-    myrfq.set_bempp_parameter("grid_res", 0.004)  # characteristic mesh size during initial meshing
+    myrfq.set_bempp_parameter("grid_res", 0.001)  # characteristic mesh size during initial meshing
     myrfq.set_bempp_parameter("refine_steps", 0)  # number of times gmsh is called to "refine by splitting"
 
     myrfq.set_geometry_parameter("vane_radius", r_vane)
