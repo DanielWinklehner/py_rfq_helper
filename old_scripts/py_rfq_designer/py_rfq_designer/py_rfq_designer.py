@@ -1905,6 +1905,7 @@ class PyRFQ(object):
         self._fudge_vanes = fudge_vanes
         self._voltage = voltage
         self._vanes = []
+        self._other_elec_objects = []
         self._cells = []
         self._cell_nos = []
         self._length = 0.0
@@ -2382,8 +2383,17 @@ class PyRFQ(object):
 
             mymask = mymask | _vane.points_inside(all_grid_pts)
 
+        for _other_elec_object in self._other_elec_objects:
+
+            if RANK == 0:
+                print("[{}] Working on other elec object".format(time.strftime('%H:%M:%S',
+                                                                               time.gmtime(int(time.time() - _ts)))))
+                sys.stdout.flush()
+
+            mymask = mymask | _other_elec_object.points_inside(all_grid_pts)
+
         # Number of masked points
-        n_masked = np.where(mymask == True)[0].shape[0]
+        n_masked = np.where(mymask is True)[0].shape[0]
 
         # Reshape mask to match original mesh
         mymask = mymask.T.reshape(mesh[0].shape)
@@ -2634,7 +2644,7 @@ s() = Surface "*";
 Physical Surface(100) = { s() };
 """
                 if reverse_mesh:
-                    geo_str += """
+                    plates_geo_str += """
 ReverseMesh Surface { s() };
                 """
 
@@ -2700,6 +2710,9 @@ RefineMesh;
                         return 1
 
                     mesh = bempp.api.import_grid(msh_fn)
+
+                    self._other_elec_objects.append(ElectrodeObject())
+                    self._other_elec_objects[-1].load_from_brep(brep_fn)
 
                 _vertices = mesh.leaf_view.vertices
                 _elements = mesh.leaf_view.elements
