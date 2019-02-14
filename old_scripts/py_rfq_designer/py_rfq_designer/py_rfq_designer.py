@@ -2604,6 +2604,7 @@ Physical Surface(100) = {6, out[]};
                 cyl_th = 0.02
                 rmax = self._variables_bempp["cyl_id"] / 2.0
                 r_ap = self._variables_bempp["ap_id"] / 2.0
+                reverse_mesh = self._variables_bempp["reverse_mesh"]
 
                 h = self.get_bempp_parameter("grid_res")
 
@@ -2632,8 +2633,12 @@ Mesh.CharacteristicLengthMax = {};
 s() = Surface "*";
 Physical Surface(100) = { s() };
 """
+                if reverse_mesh:
+                    geo_str += """
+ReverseMesh Surface { s() };
+                """
 
-                if self._temp_dir is None:
+                if self.temp_dir is None:
 
                     # noinspection PyCallingNonCallable
                     mesh = generate_from_string(plates_geo_str)
@@ -3338,7 +3343,7 @@ if __name__ == "__main__":
 
     # TODO: Idea: Make ElectrodeObject class from which other electrodes inherit?
     # TODO: Idea: Make ElectrostaticSolver class that can be reused (e.g. for Spiral Inflector)?
-    myrfq.set_bempp_parameter("add_endplates", False)  # TODO: Correct handling of OCC objects for endplates
+    myrfq.set_bempp_parameter("add_endplates", True)  # TODO: Correct handling of OCC objects for endplates
     myrfq.set_bempp_parameter("cyl_id", 0.12)
     myrfq.set_bempp_parameter("reverse_mesh", True)
     myrfq.set_bempp_parameter("grid_res", 0.005)  # characteristic mesh size during initial meshing
