@@ -2373,7 +2373,6 @@ class PyRFQ(object):
         if RANK == 0:
             print("\n*** Calculating mask for {} points ***".format(all_grid_pts.shape[0]))
 
-        # TODO: This does not include other electrodes at this point
         for _vane in self._vanes:
 
             if RANK == 0:
@@ -2618,111 +2617,100 @@ Physical Surface(100) = {6, out[]};
 
                 h = self.get_bempp_parameter("grid_res")
 
-                plates_geo_str = """SetFactory("OpenCASCADE");
+                for _plate_str, location in zip(["entrance_plate", "exit_plate"], [zmin, zmax]):
+                    plate_geo_str = """SetFactory("OpenCASCADE");
 Geometry.NumSubEdges = 100; // nicer display of curve
 Mesh.CharacteristicLengthMax = {};
-            """.format(h)
-                plates_geo_str += "// Entrance Plate \n"
-                plates_geo_str += "Cylinder(1) = {{ 0, 0, {}, 0, 0, {}, {}, 2 * Pi }};\n".format(zmin - cyl_th,
-                                                                                                 cyl_th,
-                                                                                                 rmax)
-                plates_geo_str += "Cylinder(2) = {{ 0, 0, {}, 0, 0, {}, {}, 2 * Pi }};\n".format(zmin - cyl_th - 0.001,
-                                                                                                 cyl_th + 0.002,
-                                                                                                 r_ap)
-                plates_geo_str += "BooleanDifference{ Volume{1}; Delete; }{ Volume{2}; Delete; }\n"
+""".format(h)
 
-                plates_geo_str += "// Exit Plate \n"
-                plates_geo_str += "Cylinder(2) = {{ 0, 0, {}, 0, 0, {}, {}, 2 * Pi }};\n".format(zmax - cyl_th,
-                                                                                                 cyl_th,
-                                                                                                 rmax)
-                plates_geo_str += "Cylinder(3) = {{ 0, 0, {}, 0, 0, {}, {}, 2 * Pi }};\n".format(zmax - cyl_th - 0.001,
-                                                                                                 cyl_th + 0.002,
-                                                                                                 rmax)
+                    plate_geo_str += "Cylinder(1) = {{ 0, 0, {}, 0, 0, {}, {}, 2 * Pi }}" \
+                                     ";\n".format(location - cyl_th, cyl_th, rmax)
+                    plate_geo_str += "Cylinder(2) = {{ 0, 0, {}, 0, 0, {}, {}, 2 * Pi }}" \
+                                     ";\n".format(location - cyl_th - 0.001, cyl_th + 0.002, r_ap)
+                    plate_geo_str += "BooleanDifference{ Volume{1}; Delete; }{ Volume{2}; Delete; }\n"
 
-                plates_geo_str += """
+                    plate_geo_str += """
 s() = Surface "*";
 Physical Surface(100) = { s() };
 """
-                if reverse_mesh:
-                    plates_geo_str += """
-ReverseMesh Surface { s() };
-                """
+                    if reverse_mesh:
+                        plate_geo_str += "ReverseMesh Surface { s() };\n"
 
-                tmp_dir = self.temp_dir
+                    tmp_dir = self.temp_dir
 
-                if tmp_dir is None:
+                    if tmp_dir is None:
 
-                    # noinspection PyCallingNonCallable
-                    mesh = generate_from_string(plates_geo_str)
+                        # noinspection PyCallingNonCallable
+                        mesh = generate_from_string(plate_geo_str)
 
-                else:
+                    else:
 
-                    geo_fn = os.path.join(tmp_dir, "plates.geo")
-                    msh_fn = os.path.splitext(geo_fn)[0] + ".msh"
-                    stl_fn = os.path.splitext(geo_fn)[0] + ".stl"
-                    brep_fn = os.path.splitext(geo_fn)[0] + ".brep"
-                    refine_fn = os.path.join(tmp_dir, "refine_plates.geo")
+                        geo_fn = os.path.join(tmp_dir, "{}.geo".format(_plate_str))
+                        msh_fn = os.path.splitext(geo_fn)[0] + ".msh"
+                        stl_fn = os.path.splitext(geo_fn)[0] + ".stl"
+                        brep_fn = os.path.splitext(geo_fn)[0] + ".brep"
+                        refine_fn = os.path.join(tmp_dir, "refine_plate.geo")
 
-                    with open(geo_fn, "w") as _of:
-                        _of.write(plates_geo_str)
+                        with open(geo_fn, "w") as _of:
+                            _of.write(plate_geo_str)
 
-                    gmsh_success = 0
+                        gmsh_success = 0
 
-                    command = "{} \"{}\" -0 -o \"{}\" -format brep".format(GMSH_EXE, geo_fn, brep_fn)
-                    if self._debug:
-                        print("Running", command)
-                        sys.stdout.flush()
-                    gmsh_success += os.system(command)
-
-                    refine_str = """
-Merge "{}";
-Mesh.SecondOrderLinear = 0;
-RefineMesh;
-""".format(msh_fn)
-
-                    with open(refine_fn, "w") as _of:
-                        _of.write(refine_str)
-
-                    # TODO: Could we use higher order (i.e. curved) meshes? -DW
-                    # For now, we need to save in msh2 format for BEMPP compability
-                    command = "{} \"{}\" -2 -o \"{}\" -format msh2".format(GMSH_EXE, geo_fn, msh_fn)
-                    if self._debug:
-                        print("Running", command)
-                        sys.stdout.flush()
-                    gmsh_success += os.system(command)
-
-                    for i in range(self._mesh_params["refine_steps"]):
-                        command = "{} \"{}\" -0 -o \"{}\" -format msh2".format(GMSH_EXE, refine_fn, msh_fn)
+                        command = "{} \"{}\" -0 -o \"{}\" -format brep".format(GMSH_EXE, geo_fn, brep_fn)
                         if self._debug:
                             print("Running", command)
                             sys.stdout.flush()
                         gmsh_success += os.system(command)
 
-                    # --- TODO: For testing: save stl mesh file also
-                    command = "{} \"{}\" -0 -o \"{}\" -format stl".format(GMSH_EXE, msh_fn, stl_fn)
-                    if self._debug:
-                        print("Running", command)
-                        sys.stdout.flush()
-                    gmsh_success += os.system(command)
-                    # --- #
+                        refine_str = """
+    Merge "{}";
+    Mesh.SecondOrderLinear = 0;
+    RefineMesh;
+    """.format(msh_fn)
 
-                    if gmsh_success != 0:  # or not os.path.isfile("shape.stl"):
-                        print("Something went wrong with gmsh, be sure you defined "
-                              "the correct path at the beginning of the file!")
-                        return 1
+                        with open(refine_fn, "w") as _of:
+                            _of.write(refine_str)
 
-                    mesh = bempp.api.import_grid(msh_fn)
+                        # TODO: Could we use higher order (i.e. curved) meshes? -DW
+                        # For now, we need to save in msh2 format for BEMPP compability
+                        command = "{} \"{}\" -2 -o \"{}\" -format msh2".format(GMSH_EXE, geo_fn, msh_fn)
+                        if self._debug:
+                            print("Running", command)
+                            sys.stdout.flush()
+                        gmsh_success += os.system(command)
 
-                    self._other_elec_objects.append(ElectrodeObject())
-                    self._other_elec_objects[-1].load_from_brep(brep_fn)
+                        for i in range(self._variables_bempp["refine_steps"]):
+                            command = "{} \"{}\" -0 -o \"{}\" -format msh2".format(GMSH_EXE, refine_fn, msh_fn)
+                            if self._debug:
+                                print("Running", command)
+                                sys.stdout.flush()
+                            gmsh_success += os.system(command)
 
-                _vertices = mesh.leaf_view.vertices
-                _elements = mesh.leaf_view.elements
-                _domain_ids = mesh.leaf_view.domain_indices
+                        # --- TODO: For testing: save stl mesh file also
+                        command = "{} \"{}\" -0 -o \"{}\" -format stl".format(GMSH_EXE, msh_fn, stl_fn)
+                        if self._debug:
+                            print("Running", command)
+                            sys.stdout.flush()
+                        gmsh_success += os.system(command)
+                        # --- #
 
-                vertices = np.concatenate((vertices, _vertices), axis=1)
-                elements = np.concatenate((elements, _elements + vertex_counter), axis=1)
-                domains = np.concatenate((domains, _domain_ids), axis=0)
+                        if gmsh_success != 0:  # or not os.path.isfile("shape.stl"):
+                            print("Something went wrong with gmsh, be sure you defined "
+                                  "the correct path at the beginning of the file!")
+                            return 1
+
+                        mesh = bempp.api.import_grid(msh_fn)
+
+                        self._other_elec_objects.append(ElectrodeObject())
+                        self._other_elec_objects[-1].load_from_brep(brep_fn)
+
+                    _vertices = mesh.leaf_view.vertices
+                    _elements = mesh.leaf_view.elements
+                    _domain_ids = mesh.leaf_view.domain_indices
+
+                    vertices = np.concatenate((vertices, _vertices), axis=1)
+                    elements = np.concatenate((elements, _elements + vertex_counter), axis=1)
+                    domains = np.concatenate((domains, _domain_ids), axis=0)
 
             mpi_data = {"vert": vertices,
                         "elem": elements,
@@ -3291,7 +3279,7 @@ End Sub
 
 if __name__ == "__main__":
 
-    mydebug = True
+    mydebug = False
     myfn = "PARMTEQOUT_mod.TXT"
 
     r_vane = 0.0093
@@ -3379,13 +3367,13 @@ if __name__ == "__main__":
     if RANK == 0:
         print("Generating vanes took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
-    if RANK == 0:
-        myrfq.plot_vane_profile()
-        # myrfq.write_inventor_macro(vane_type='vane',
-        #                            vane_radius=r_vane,
-        #                            vane_height=h_vane,
-        #                            vane_height_type='absolute',
-        #                            nz=nz)
+    # if RANK == 0:
+    #     myrfq.plot_vane_profile()
+    #     myrfq.write_inventor_macro(vane_type='vane',
+    #                                vane_radius=r_vane,
+    #                                vane_height=h_vane,
+    #                                vane_height_type='absolute',
+    #                                nz=nz)
 
     if RANK == 0:
         print("Loading and assembling full mesh for BEMPP")
