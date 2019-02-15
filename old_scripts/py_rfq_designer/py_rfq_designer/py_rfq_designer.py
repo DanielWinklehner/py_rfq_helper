@@ -2532,6 +2532,8 @@ class PyRFQ(object):
 
         assert self._vanes is not None, "No vanes generated yet, cannot mesh..."
 
+        tmp_dir = self.temp_dir
+
         # Initialize empty arrays of the correct shape (3 x n)
         vertices = np.zeros([3, 0])
         elements = np.zeros([3, 0])
@@ -2606,6 +2608,9 @@ Physical Surface(100) = {6, out[]};
                 elements = np.concatenate((elements, _elements + vertex_counter), axis=1)
                 domains = np.concatenate((domains, _domain_ids), axis=0)
 
+                # Increase the running counters
+                vertex_counter += _vertices.shape[1]
+
             elif self._variables_bempp["add_endplates"]:
 
                 zmin = 0.0 - self._variables_bempp["cyl_gap"]
@@ -2635,8 +2640,6 @@ Physical Surface(100) = { s() };
 """
                     if reverse_mesh:
                         plate_geo_str += "ReverseMesh Surface { s() };\n"
-
-                    tmp_dir = self.temp_dir
 
                     if tmp_dir is None:
 
@@ -2711,6 +2714,9 @@ Physical Surface(100) = { s() };
                     vertices = np.concatenate((vertices, _vertices), axis=1)
                     elements = np.concatenate((elements, _elements + vertex_counter), axis=1)
                     domains = np.concatenate((domains, _domain_ids), axis=0)
+
+                    # Increase the running counters
+                    vertex_counter += _vertices.shape[1]
 
             mpi_data = {"vert": vertices,
                         "elem": elements,
