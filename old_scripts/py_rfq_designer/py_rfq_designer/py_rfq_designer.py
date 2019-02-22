@@ -973,6 +973,7 @@ class PyRFQElectrode(object):
 
         self._geo_str = None
         self._occ_obj = None
+        self._occ_npart = 1
 
         self._mesh_fn = None
 
@@ -1068,7 +1069,7 @@ RefineMesh;
 
         return 0
 
-    def generate_occ(self, npart=1):
+    def generate_occ(self):
 
         if HAVE_OCC:
 
@@ -1077,7 +1078,7 @@ RefineMesh;
 
             self._occ_obj = ElectrodeObject()
             self._occ_obj.load_from_brep(brep_fn)
-            self._occ_obj.partition_z(npart)
+            self._occ_obj.partition_z(self._occ_npart)
 
             return 0
 
@@ -1180,6 +1181,7 @@ class PyRFQVane(PyRFQElectrode):
                  cells,
                  voltage,
                  occ_tolerance=1e-5,
+                 occ_npart=1,
                  debug=False,
                  reverse_normals=False,
                  h=0.05):
@@ -1196,6 +1198,7 @@ class PyRFQVane(PyRFQElectrode):
                          h=h,
                          debug=debug)
 
+        self._occ_npart = occ_npart
         self._type = vane_type
         self._has_profile = False
         self._fudge = False
@@ -2290,49 +2293,49 @@ class PyRFQ(object):
         _ts = time.time()
 
         # Iterate over all the dimensions, calculate the subset of potential
-        domain_idx = 1
-        for x1, x2 in zip(start_idxs[X], end_idxs[X]):
-            for y1, y2 in zip(start_idxs[Y], end_idxs[Y]):
-                for z1, z2 in zip(start_idxs[Z], end_idxs[Z]):
+        if RANK == 0:
+            domain_idx = 1
+            for x1, x2 in zip(start_idxs[X], end_idxs[X]):
+                for y1, y2 in zip(start_idxs[Y], end_idxs[Y]):
+                    for z1, z2 in zip(start_idxs[Z], end_idxs[Z]):
 
-                    # Create mask subset for this set of points and only calculate those
-                    local_mask = mymask[x1:x2, y1:y2, z1:z2].ravel()
-                    grid_pts = np.vstack([_mesh[x1:x2, y1:y2, z1:z2].ravel() for _mesh in mesh])
-                    grid_pts_len = grid_pts.shape[1]  # save shape for later
-                    grid_pts = grid_pts[:, ~local_mask]  # reduce for faster calculation
+                        # Create mask subset for this set of points and only calculate those
+                        local_mask = mymask[x1:x2, y1:y2, z1:z2].ravel()
+                        grid_pts = np.vstack([_mesh[x1:x2, y1:y2, z1:z2].ravel() for _mesh in mesh])
+                        grid_pts_len = grid_pts.shape[1]  # save shape for later
+                        grid_pts = grid_pts[:, ~local_mask]  # reduce for faster calculation
 
-                    if RANK == 0:
-                        print("[{}] Domain {}/{}, "
-                              "Index Limits: x = ({}, {}), "
-                              "y = ({}, {}), "
-                              "z = ({}, {})".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - _ts))),
-                                                    domain_idx,
-                                                    np.product(domain_decomp),
-                                                    x1, x2 - 1, y1, y2 - 1, z1, z2 - 1))
-                        print("Removed {} points due to mask".format(grid_pts_len - grid_pts.shape[1]))
+                        if RANK == 0:
+                            print("[{}] Domain {}/{}, "
+                                  "Index Limits: x = ({}, {}), "
+                                  "y = ({}, {}), "
+                                  "z = ({}, {})".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - _ts))),
+                                                        domain_idx,
+                                                        np.product(domain_decomp),
+                                                        x1, x2 - 1, y1, y2 - 1, z1, z2 - 1))
+                            print("Removed {} points due to mask".format(grid_pts_len - grid_pts.shape[1]))
 
-                    temp_pot = bempp.api.operators.potential.laplace.single_layer(dp0_space, grid_pts) * n_fun
-                    # slp_pot = bempp.api.operators.potential.laplace.single_layer(dp0_space, grid_pts)
-                    # dlp_pot = bempp.api.operators.potential.laplace.double_layer(p1_space, grid_pts)
-                    # temp_pot = slp_pot * n_fun - dlp_pot * d_fun
+                        temp_pot = bempp.api.operators.potential.laplace.single_layer(dp0_space, grid_pts) * n_fun
 
-                    # Create array of original shape and fill with result at right place, then move into master array
-                    _pot = np.zeros(grid_pts_len)
+                        # Create array of original shape and fill with result at right place, then move into master array
+                        _pot = np.zeros(grid_pts_len)
 
-                    _pot[~local_mask] = temp_pot[0]
-                    pot[x1:x2, y1:y2, z1:z2] = _pot.reshape([x2 - x1, y2 - y1, z2 - z1])
+                        _pot[~local_mask] = temp_pot[0]
+                        pot[x1:x2, y1:y2, z1:z2] = _pot.reshape([x2 - x1, y2 - y1, z2 - z1])
 
-                    domain_idx += 1
+                        domain_idx += 1
 
-        try:
+            try:
 
-            del grid_pts
-            del _pot
-            del temp_pot
+                del grid_pts
+                del _pot
+                del temp_pot
 
-        except Exception as _e:
+            except Exception as _e:
 
-            print("Exception {} happened, but trying to carry on...".format(_e))
+                print("Exception {} happened, but trying to carry on...".format(_e))
+
+        # TODO: Distribute results to other nodes -DW
 
         self._variables_bempp["ef_phi"] = pot
         self._variables_bempp["ef_mask"] = mymask
@@ -2414,10 +2417,6 @@ class PyRFQ(object):
                                                          self._full_mesh["domns"])
 
         dp0_space = bempp.api.function_space(mesh, "DP", 0)
-        # p1_space = bempp.api.function_space(self._full_mesh, "P", 1)
-        # identity = bempp.api.operators.boundary.sparse.identity(p1_space, p1_space, dp0_space)
-        # dlp = bempp.api.operators.boundary.laplace.double_layer(p1_space, p1_space, dp0_space)
-        slp = bempp.api.operators.boundary.laplace.single_layer(dp0_space, dp0_space, dp0_space)
 
         domain_mapping = {}
         for _elec_obj in self._elec_objects:
@@ -2429,20 +2428,23 @@ class PyRFQ(object):
             result[0] = domain_mapping[domain_index]
 
         dirichlet_fun = bempp.api.GridFunction(dp0_space, fun=f)
-        # dirichlet_fun = bempp.api.GridFunction(p1_space, fun=f)
-        # rhs = (.5 * identity + dlp) * dirichlet_fun
+        self._variables_bempp["d_fun_coeff"] = dirichlet_fun.coefficients
 
         if self._debug and RANK == 0:
             dirichlet_fun.plot()
 
-        # Solve BEMPP problem
-        # neumann_fun, info = bempp.api.linalg.cg(slp, rhs, tol=1e-5)
-        neumann_fun, info = bempp.api.linalg.gmres(slp, dirichlet_fun, tol=1e-6, use_strong_form=True)
+        # Solve BEMPP problem only on 1 cpu (has internal multiprocessing)
+        if RANK == 0:
+            slp = bempp.api.operators.boundary.laplace.single_layer(dp0_space, dp0_space, dp0_space)
+            neumann_fun, info = bempp.api.linalg.gmres(slp, dirichlet_fun, tol=1e-6, use_strong_form=True)
+            mpi_data = {"nfun": neumann_fun,
+                        "info": info}
+        else:
+            mpi_data = None
 
-        self._variables_bempp["n_fun_coeff"] = neumann_fun.coefficients
-        self._variables_bempp["d_fun_coeff"] = dirichlet_fun.coefficients
-        # self._variables_bempp["dp0_space"] = dp0_space
-        # self._variables_bempp["p1_space"] = p1_space
+        mpi_data = COMM.bcast(mpi_data, root=0)
+
+        self._variables_bempp["n_fun_coeff"] = mpi_data["nfun"].coefficients
 
         return 0
 
@@ -2461,6 +2463,7 @@ class PyRFQ(object):
                                  cells=self._cells,
                                  voltage=self._voltage * 0.5,  # Given voltage is 'inter-vane'
                                  occ_tolerance=self._occ_tolerance,
+                                 occ_npart=15,
                                  h=self._variables_bempp["grid_res"],
                                  debug=self._debug),
 
@@ -2469,6 +2472,7 @@ class PyRFQ(object):
                                  cells=self._cells,
                                  voltage=-self._voltage * 0.5,  # Given voltage is 'inter-vane'
                                  occ_tolerance=self._occ_tolerance,
+                                 occ_npart=15,
                                  h=self._variables_bempp["grid_res"],
                                  debug=self._debug)]
 
@@ -2754,12 +2758,12 @@ class PyRFQ(object):
 
         return 0
 
-    def generate_occ(self, npart=1):
+    def generate_occ(self):
 
         # Unfortunately, multiprocessing/MPI can't handle SwigPyObject objects
         for _elec_object in self._elec_objects:
 
-            _elec_object.generate_occ(npart=npart)
+            _elec_object.generate_occ()
 
         return 0
 
@@ -3192,7 +3196,7 @@ if __name__ == "__main__":
     # myrfq.set_bempp_parameter("add_endplates", True)  # TODO: Correct handling of OCC objects for endplates
     # myrfq.set_bempp_parameter("cyl_id", 0.12)
     myrfq.set_bempp_parameter("reverse_mesh", True)
-    myrfq.set_bempp_parameter("grid_res", 0.004)  # characteristic mesh size during initial meshing
+    myrfq.set_bempp_parameter("grid_res", 0.001)  # characteristic mesh size during initial meshing
     myrfq.set_bempp_parameter("refine_steps", 0)  # number of times gmsh is called to "refine by splitting"
 
     myrfq.set_geometry_parameter("vane_radius", r_vane)
@@ -3217,10 +3221,6 @@ if __name__ == "__main__":
     if RANK == 0:
         print("Initializing took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
-    myrfq.save_to_file()
-
-    exit(0)
-
     # if RANK == 0:
     #     myrfq.plot_vane_profile()
     #     myrfq.write_inventor_macro(vane_type='vane',
@@ -3232,11 +3232,11 @@ if __name__ == "__main__":
     myrfq.generate_geo_str()
     myrfq.generate_gmsh_files()
 
-    if RANK == 0:
-        import pickle
-        with open("full_rfq_save.pickle", "wb") as of:
-            pickle.dump(myrfq, of)
-
+    # if RANK == 0:
+    #     import pickle
+    #     with open("full_rfq_save.pickle", "wb") as of:
+    #         pickle.dump(myrfq, of)
+    #
     # import pickle
     # with open("full_rfq_save.pickle", "rb") as inf:
     #     myrfq = pickle.load(inf)
@@ -3248,12 +3248,12 @@ if __name__ == "__main__":
     if RANK == 0:
         print("Assembling mesh took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
+    bempp.api.global_parameters.hmat.eps = 1e-5
+
     if RANK == 0:
         print("Solving BEMPP problem")
-    ts = time.time()
-    if RANK == 0:
+        ts = time.time()
         myrfq.solve_bempp()
-    if RANK == 0:
         print("Solving BEMPP took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
     if RANK == 0:
@@ -3261,7 +3261,12 @@ if __name__ == "__main__":
         with open("full_rfq_save.pickle", "wb") as of:
             pickle.dump(myrfq, of)
 
-    myrfq.generate_occ(npart=10)
+    bempp.api.global_parameters.hmat.min_block_size = 1000
+
+    ts = time.time()
+    myrfq.generate_occ()
+    if RANK == 0:
+        print("Generating OCC objects took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
     ts = time.time()
     _myres = 0.001
