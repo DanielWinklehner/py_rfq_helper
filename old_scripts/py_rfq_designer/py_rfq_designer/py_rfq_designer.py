@@ -2501,7 +2501,7 @@ class PyRFQ(object):
                 _vane = self._worker_generate_vane_profile(local_vanes[0])
                 mpi_data = {"vanes": [_vane, COMM.recv(source=1)]}
             elif RANK == 1:
-                print("Proc {} working on vane {}".format(RANK, local_vanes[0].vane_type))
+                print("Proc {} working on vane {}".format(RANK, local_vanes[1].vane_type))
                 sys.stdout.flush()
                 _vane = self._worker_generate_vane_profile(local_vanes[1])
                 COMM.send(_vane, dest=0)
@@ -2601,73 +2601,84 @@ class PyRFQ(object):
         if not self._initialized:
             print("RFQ needs to be initialized, attempting now...")
 
-        if MPI is None or SIZE == 1:
+        # if MPI is None or SIZE == 1:
+        if RANK == 0:
             # no mpi or single core: use python multiprocessing and at least have threads for speedup
             if USE_MULTIPROC:
                 p = Pool()
-                self._elec_objects = p.map(self._worker_generate_geo_str, self._elec_objects)
+                _elec_objects = p.map(self._worker_generate_geo_str, self._elec_objects)
             else:
-                for i, _vane in enumerate(self._elec_objects):
-                    self._elec_objects[i] = self._worker_generate_geo_str(_vane)
+                _elec_objects = []
+                for i, _elec_obj in enumerate(self._elec_objects):
+                    _elec_objects.append(self._worker_generate_geo_str(_elec_obj))
 
-        elif SIZE >= 4:
-            # We have 4 or more procs and can use a single processor per vane
-
-            if RANK <= 3:
-                # Generate on proc 0-3
-                print("Proc {} working on vane {}.".format(RANK + 1, self._elec_objects[RANK].vane_type))
-                sys.stdout.flush()
-                _vane = self._worker_generate_geo_str(self._elec_objects[RANK])
-
-                if RANK == 0:
-                    # Assemble on proc 0
-                    mpi_data = {"vanes": [_vane,
-                                          COMM.recv(source=1),
-                                          COMM.recv(source=2),
-                                          COMM.recv(source=3)]}
-                else:
-                    COMM.send(_vane, dest=0)
-                    mpi_data = None
-
-            else:
-                print("Proc {} idle.".format(RANK + 1))
-                sys.stdout.flush()
-                mpi_data = None
-
-            # Distribute
-            self._elec_objects = COMM.bcast(mpi_data, root=0)["vanes"]
-            COMM.barrier()
+            mpi_data = {"elecs": _elec_objects}
 
         else:
-            # We have 2 or 3 procs, so do two vanes each on proc 0 and proc 1
-            if RANK <= 1:
-                # Generate on proc 0, 1
-                print("Proc {} working on vanes {} and {}.".format(RANK + 1,
-                                                                   self._elec_objects[RANK].vane_type,
-                                                                   self._elec_objects[RANK + 2].vane_type))
-                sys.stdout.flush()
-                local_vanes = [self._worker_generate_geo_str(self._elec_objects[RANK]),
-                               self._worker_generate_geo_str(self._elec_objects[RANK + 2])]
+            mpi_data = None
 
-                if RANK == 0:
-                    # Assemble on proc 0
-                    other_vanes = COMM.recv(source=1)
-                    mpi_data = {"vanes": [local_vanes[0],
-                                          other_vanes[0],
-                                          local_vanes[1],
-                                          other_vanes[1]]}
-                else:
-                    COMM.send(local_vanes, dest=0)
-                    mpi_data = None
+        self._elec_objects = COMM.bcast(mpi_data, root=0)["elecs"]
+        COMM.barrier()
 
-            else:
-                print("Proc {} idle.".format(RANK + 1))
-                sys.stdout.flush()
-                mpi_data = None
+        # TODO: MPI-ify this?
+        # elif SIZE >= 4:
+        #     # We have 4 or more procs and can use a single processor per vane
+        #
+        #     if RANK <= 3:
+        #         # Generate on proc 0-3
+        #         print("Proc {} working on electrode {}.".format(RANK + 1, self._elec_objects[RANK].name))
+        #         sys.stdout.flush()
+        #         _vane = self._worker_generate_geo_str(self._elec_objects[RANK])
+        #
+        #         if RANK == 0:
+        #             # Assemble on proc 0
+        #             mpi_data = {"vanes": [_vane,
+        #                                   COMM.recv(source=1),
+        #                                   COMM.recv(source=2),
+        #                                   COMM.recv(source=3)]}
+        #         else:
+        #             COMM.send(_vane, dest=0)
+        #             mpi_data = None
+        #
+        #     else:
+        #         print("Proc {} idle.".format(RANK + 1))
+        #         sys.stdout.flush()
+        #         mpi_data = None
+        #
+        #     # Distribute
+        #     self._elec_objects = COMM.bcast(mpi_data, root=0)["vanes"]
+        #     COMM.barrier()
 
-            # Distribute
-            self._elec_objects = COMM.bcast(mpi_data, root=0)["vanes"]
-            COMM.barrier()
+        # else:
+        #     # We have 2 or 3 procs, so do two vanes each on proc 0 and proc 1
+        #     if RANK <= 1:
+        #         # Generate on proc 0, 1
+        #         print("Proc {} working on vanes {} and {}.".format(RANK + 1,
+        #                                                            self._elec_objects[RANK].vane_type,
+        #                                                            self._elec_objects[RANK + 2].vane_type))
+        #         sys.stdout.flush()
+        #         local_vanes = [self._worker_generate_geo_str(self._elec_objects[RANK]),
+        #                        self._worker_generate_geo_str(self._elec_objects[RANK + 2])]
+        #
+        #         if RANK == 0:
+        #             # Assemble on proc 0
+        #             other_vanes = COMM.recv(source=1)
+        #             mpi_data = {"vanes": [local_vanes[0],
+        #                                   other_vanes[0],
+        #                                   local_vanes[1],
+        #                                   other_vanes[1]]}
+        #         else:
+        #             COMM.send(local_vanes, dest=0)
+        #             mpi_data = None
+        #
+        #     else:
+        #         print("Proc {} idle.".format(RANK + 1))
+        #         sys.stdout.flush()
+        #         mpi_data = None
+        #
+        #     # Distribute
+        #     self._elec_objects = COMM.bcast(mpi_data, root=0)["vanes"]
+        #     COMM.barrier()
 
         self._have_geo_str = True
 
@@ -2685,76 +2696,93 @@ class PyRFQ(object):
             self.generate_geo_str()
 
         if RANK == 0:
-            print("Generating gmsh files of the vanes.")
+            print("Generating gmsh files of the electrodes.")
             sys.stdout.flush()
 
-        if MPI is None or SIZE == 1:
             # no mpi or single core: use python multiprocessing and at least have threads for speedup
             if USE_MULTIPROC:
                 p = Pool()
-                self._elec_objects = p.map(self._worker_generate_gmsh_files, self._elec_objects)
+                _elec_objects = p.map(self._worker_generate_gmsh_files, self._elec_objects)
             else:
-                for i, _vane in enumerate(self._elec_objects):
-                    self._elec_objects[i] = self._worker_generate_gmsh_files(_vane)
+                _elec_objects = []
+                for i, _elec_obj in enumerate(self._elec_objects):
+                    _elec_objects.append(self._worker_generate_gmsh_files(_elec_obj))
 
-        elif SIZE >= 4:
-            # We have 4 or more procs and can use a single processor per vane
-
-            if RANK <= 3:
-                # Generate on proc 0-3
-                print("Proc {} working on vane {}.".format(RANK + 1, self._elec_objects[RANK].vane_type))
-                sys.stdout.flush()
-                _vane = self._worker_generate_gmsh_files(self._elec_objects[RANK])
-
-                if RANK == 0:
-                    # Assemble on proc 0
-                    mpi_data = {"vanes": [_vane,
-                                          COMM.recv(source=1),
-                                          COMM.recv(source=2),
-                                          COMM.recv(source=3)]}
-                else:
-                    COMM.send(_vane, dest=0)
-                    mpi_data = None
-
-            else:
-                print("Proc {} idle.".format(RANK + 1))
-                sys.stdout.flush()
-                mpi_data = None
-
-            # Distribute
-            self._elec_objects = COMM.bcast(mpi_data, root=0)["vanes"]
-            COMM.barrier()
+            mpi_data = {"elecs": _elec_objects}
 
         else:
-            # We have 2 or 3 procs, so do two vanes each on proc 0 and proc 1
-            if RANK <= 1:
-                # Generate on proc 0, 1
-                print("Proc {} working on vanes {} and {}.".format(RANK + 1,
-                                                                   self._elec_objects[RANK].vane_type,
-                                                                   self._elec_objects[RANK + 2].vane_type))
-                sys.stdout.flush()
-                local_vanes = [self._worker_generate_gmsh_files(self._elec_objects[RANK]),
-                               self._worker_generate_gmsh_files(self._elec_objects[RANK + 2])]
+            mpi_data = None
 
-                if RANK == 0:
-                    # Assemble on proc 0
-                    other_vanes = COMM.recv(source=1)
-                    mpi_data = {"vanes": [local_vanes[0],
-                                          other_vanes[0],
-                                          local_vanes[1],
-                                          other_vanes[1]]}
-                else:
-                    COMM.send(local_vanes, dest=0)
-                    mpi_data = None
+        self._elec_objects = COMM.bcast(mpi_data, root=0)["elecs"]
+        COMM.barrier()
 
-            else:
-                print("Proc {} idle.".format(RANK + 1))
-                sys.stdout.flush()
-                mpi_data = None
-
-            # Distribute
-            self._elec_objects = COMM.bcast(mpi_data, root=0)["vanes"]
-            COMM.barrier()
+        # if MPI is None or SIZE == 1:
+        #     # no mpi or single core: use python multiprocessing and at least have threads for speedup
+        #     if USE_MULTIPROC:
+        #         p = Pool()
+        #         self._elec_objects = p.map(self._worker_generate_gmsh_files, self._elec_objects)
+        #     else:
+        #         for i, _vane in enumerate(self._elec_objects):
+        #             self._elec_objects[i] = self._worker_generate_gmsh_files(_vane)
+        #
+        # elif SIZE >= 4:
+        #     # We have 4 or more procs and can use a single processor per vane
+        #
+        #     if RANK <= 3:
+        #         # Generate on proc 0-3
+        #         print("Proc {} working on vane {}.".format(RANK + 1, self._elec_objects[RANK].vane_type))
+        #         sys.stdout.flush()
+        #         _vane = self._worker_generate_gmsh_files(self._elec_objects[RANK])
+        #
+        #         if RANK == 0:
+        #             # Assemble on proc 0
+        #             mpi_data = {"vanes": [_vane,
+        #                                   COMM.recv(source=1),
+        #                                   COMM.recv(source=2),
+        #                                   COMM.recv(source=3)]}
+        #         else:
+        #             COMM.send(_vane, dest=0)
+        #             mpi_data = None
+        #
+        #     else:
+        #         print("Proc {} idle.".format(RANK + 1))
+        #         sys.stdout.flush()
+        #         mpi_data = None
+        #
+        #     # Distribute
+        #     self._elec_objects = COMM.bcast(mpi_data, root=0)["vanes"]
+        #     COMM.barrier()
+        #
+        # else:
+        #     # We have 2 or 3 procs, so do two vanes each on proc 0 and proc 1
+        #     if RANK <= 1:
+        #         # Generate on proc 0, 1
+        #         print("Proc {} working on vanes {} and {}.".format(RANK + 1,
+        #                                                            self._elec_objects[RANK].vane_type,
+        #                                                            self._elec_objects[RANK + 2].vane_type))
+        #         sys.stdout.flush()
+        #         local_vanes = [self._worker_generate_gmsh_files(self._elec_objects[RANK]),
+        #                        self._worker_generate_gmsh_files(self._elec_objects[RANK + 2])]
+        #
+        #         if RANK == 0:
+        #             # Assemble on proc 0
+        #             other_vanes = COMM.recv(source=1)
+        #             mpi_data = {"vanes": [local_vanes[0],
+        #                                   other_vanes[0],
+        #                                   local_vanes[1],
+        #                                   other_vanes[1]]}
+        #         else:
+        #             COMM.send(local_vanes, dest=0)
+        #             mpi_data = None
+        #
+        #     else:
+        #         print("Proc {} idle.".format(RANK + 1))
+        #         sys.stdout.flush()
+        #         mpi_data = None
+        #
+        #     # Distribute
+        #     self._elec_objects = COMM.bcast(mpi_data, root=0)["vanes"]
+        #     COMM.barrier()
 
         return 0
 
