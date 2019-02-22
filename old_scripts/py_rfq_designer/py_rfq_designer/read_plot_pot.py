@@ -86,7 +86,7 @@ zmin, zmax = mydata["limits"][2]
 print("Loaded data with n = ", mydata["n"], ", d = ", mydata["d"])
 print("Limits are ", xmin, xmax, ymin, ymax, zmin, zmax)
 
-z_idx_s = [60]
+z_idx_s = [int(0.5 * nz)]
 # z_idx_s = range(126)
 for z_idx in z_idx_s:
     z_pos = zmin + z_idx * dz
