@@ -104,7 +104,7 @@ except ImportError:
     print("Something went wrong during OCC import. No CAD support possible!")
 
 USE_MULTIPROC = True  # In case we are not using mpi or only using 1 processor, fall back on multiprocessing
-GMSH_EXE = "/home/daniel/src/gmsh-4.0.0-Linux64/bin/gmsh"
+GMSH_EXE = "/home/daniel/src/gmsh4/bin/gmsh"
 # GMSH_EXE = "E:/gmsh4/gmsh.exe"
 HAVE_TEMP_FOLDER = False
 np.set_printoptions(threshold=10000)
@@ -2443,6 +2443,8 @@ class PyRFQ(object):
 
         mpi_data = COMM.bcast(mpi_data, root=0)
 
+        COMM.barrier()
+
         self._variables_bempp["n_fun_coeff"] = mpi_data["nfun"].coefficients
 
         return 0
@@ -2591,6 +2593,11 @@ class PyRFQ(object):
                 bempp.api.grid.grid_from_element_data(vertices,
                                                       elements,
                                                       domains).plot()
+
+        # Broadcast results to all nodes
+        self._full_mesh = COMM.bcast(self._full_mesh, root=0)
+
+        COMM.barrier()
 
         return self._full_mesh
 
@@ -3216,7 +3223,8 @@ if __name__ == "__main__":
                       a=0.15,
                       L=0.018339)
 
-    print(myrfq)
+    if RANK == 0:
+        print(myrfq)
 
     # TODO: Idea: Make ElectrodeObject class from which other electrodes inherit?
     # TODO: Idea: Make ElectrostaticSolver class that can be reused (e.g. for Spiral Inflector)?
@@ -3279,8 +3287,9 @@ if __name__ == "__main__":
 
     if RANK == 0:
         print("Solving BEMPP problem")
-        ts = time.time()
-        myrfq.solve_bempp()
+    ts = time.time()
+    myrfq.solve_bempp()
+    if RANK == 0:
         print("Solving BEMPP took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
     if RANK == 0:
