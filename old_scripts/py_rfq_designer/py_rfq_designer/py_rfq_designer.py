@@ -2197,9 +2197,9 @@ class PyRFQ(object):
 
         _mesh_data = self._full_mesh
         _n_data = self._variables_bempp["n_fun_coeff"]
-        _d_data = self._variables_bempp["d_fun_coeff"]
+        # _d_data = self._variables_bempp["d_fun_coeff"]
 
-        assert _mesh_data is not None and _n_data is not None and _d_data is not None, \
+        assert _mesh_data is not None and _n_data is not None, \
             "One of grid, dirichlet_function, neumann_function is None!"
 
         _ts = time.time()
@@ -2211,7 +2211,6 @@ class PyRFQ(object):
         dp0_space = bempp.api.function_space(_mesh, "DP", 0)
         n_fun = bempp.api.GridFunction(dp0_space, coefficients=_n_data)
         # d_fun = bempp.api.GridFunction(dp0_space, coefficients=_d_data)
-
         # dp0_space = self._variables_bempp["dp0_space"]
         # p1_space = self._variables_bempp["p1_space"]
 
