@@ -2832,6 +2832,13 @@ class PyRFQ(object):
 
         return 0
 
+    @staticmethod
+    def message(*args, rank=0):
+        if RANK == rank:
+            print(*args)
+            sys.stdout.flush()
+        return 0
+
     def reset(self):
 
         self._vanes = []
@@ -3223,8 +3230,7 @@ if __name__ == "__main__":
                       a=0.15,
                       L=0.018339)
 
-    if RANK == 0:
-        print(myrfq)
+    myrfq.message(myrfq)  # = print(myrfq), message without kwargs prints on RANK 0 and flushes output immediately.
 
     # TODO: Idea: Make ElectrodeObject class from which other electrodes inherit?
     # TODO: Idea: Make ElectrostaticSolver class that can be reused (e.g. for Spiral Inflector)?
@@ -3249,12 +3255,10 @@ if __name__ == "__main__":
                         voltage=0.0,
                         aperture_dia=0.02)
 
-    if RANK == 0:
-        print("Generating vanes")
+    myrfq.message("Initializing vanes...")
     ts = time.time()
     myrfq.initialize()
-    if RANK == 0:
-        print("Initializing took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
+    myrfq.message("Initializing vanes took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
     # if RANK == 0:
     #     myrfq.plot_vane_profile()
@@ -3276,34 +3280,42 @@ if __name__ == "__main__":
     # with open("full_rfq_save.pickle", "rb") as inf:
     #     myrfq = pickle.load(inf)
 
-    if RANK == 0:
-        print("Loading and assembling full mesh for BEMPP")
+    myrfq.message("Loading and assembling full mesh for BEMPP")
     ts = time.time()
     myrfq.generate_full_mesh()
-    if RANK == 0:
-        print("Assembling mesh took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
+    myrfq.message("Assembling mesh took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
+    # Increase eps
     bempp.api.global_parameters.hmat.eps = 1e-5
 
-    if RANK == 0:
-        print("Solving BEMPP problem")
+    # Increase quadrature orders
+    # bempp.api.global_parameters.quadrature.near.single_order = 5
+    # bempp.api.global_parameters.quadrature.near.double_order = 5
+    # bempp.api.global_parameters.quadrature.medium.single_order = 4
+    # bempp.api.global_parameters.quadrature.medium.double_order = 4
+    # bempp.api.global_parameters.quadrature.far.single_order = 3
+    # bempp.api.global_parameters.quadrature.far.double_order = 3
+
+    myrfq.message("Solving BEMPP problem...")
     ts = time.time()
     myrfq.solve_bempp()
-    if RANK == 0:
-        print("Solving BEMPP took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
+    myrfq.message("Solving BEMPP took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
     if RANK == 0:
         import pickle
         with open("full_rfq_save.pickle", "wb") as of:
             pickle.dump(myrfq, of)
 
+    # Increase hmat block size
     bempp.api.global_parameters.hmat.min_block_size = 1000
 
+    myrfq.message("Generating OCC objects...")
     ts = time.time()
     myrfq.generate_occ()
-    if RANK == 0:
-        print("Generating OCC objects took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
+    myrfq.message("Generating OCC objects took {}".format(time.strftime('%H:%M:%S',
+                                                                        time.gmtime(int(time.time() - ts)))))
 
+    myrfq.message("Calculating Mask & Potential...")
     ts = time.time()
     _myres = 0.001
     myres = [_myres, _myres, _myres]
@@ -3315,8 +3327,7 @@ if __name__ == "__main__":
                               res=myres,
                               domain_decomp=(1, 1, 10),
                               overlap=0)
-    if RANK == 0:
-        print("Mask & Potential took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
+    myrfq.message("Mask & Potential took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
     if RANK == 0:
         import pickle
