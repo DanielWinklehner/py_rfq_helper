@@ -2204,8 +2204,7 @@ class PyRFQ(object):
 
         _ts = time.time()
 
-        if RANK == 0:
-            print("Re-Generating Grid, GridFunctions, and FunctionSpace")
+        self.message("Re-Generating Grid, GridFunctions, and FunctionSpace")
 
         _mesh = bempp.api.grid.grid_from_element_data(_mesh_data["verts"], _mesh_data["elems"], _mesh_data["domns"])
         dp0_space = bempp.api.function_space(_mesh, "DP", 0)
@@ -2214,8 +2213,7 @@ class PyRFQ(object):
         # dp0_space = self._variables_bempp["dp0_space"]
         # p1_space = self._variables_bempp["p1_space"]
 
-        if RANK == 0:
-            print("Re-Generating took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - _ts)))))
+        self.message("Re-Generating took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - _ts)))))
 
         # noinspection PyUnresolvedReferences
         all_vert = self._full_mesh["verts"]
@@ -2271,11 +2269,8 @@ class PyRFQ(object):
 
         for _elec_object in self._elec_objects:
 
-            if RANK == 0:
-                print("[{}] Working on electrode object {}".format(time.strftime('%H:%M:%S',
-                                                                                 time.gmtime(int(time.time() - _ts))),
-                                                                   _elec_object.name))
-                sys.stdout.flush()
+            self.message("[{}] Working on electrode object {}".format(
+                time.strftime('%H:%M:%S', time.gmtime(int(time.time() - _ts))), _elec_object.name))
 
             mymask = mymask | _elec_object.points_inside(all_grid_pts)
 
@@ -2285,9 +2280,8 @@ class PyRFQ(object):
         # Reshape mask to match original mesh
         mymask = mymask.T.reshape(mesh[0].shape)
 
-        if RANK == 0:
-            print("Generating mask took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - _ts)))))
-            print("\n*** Calculating potential for {} points ***".format(all_grid_pts.shape[0] - n_masked))
+        self.message("Generating mask took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - _ts)))))
+        self.message("\n*** Calculating potential for {} points ***".format(all_grid_pts.shape[0] - n_masked))
 
         _ts = time.time()
 
@@ -2304,19 +2298,16 @@ class PyRFQ(object):
                         grid_pts_len = grid_pts.shape[1]  # save shape for later
                         grid_pts = grid_pts[:, ~local_mask]  # reduce for faster calculation
 
-                        if RANK == 0:
-                            print("[{}] Domain {}/{}, "
-                                  "Index Limits: x = ({}, {}), "
-                                  "y = ({}, {}), "
-                                  "z = ({}, {})".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - _ts))),
-                                                        domain_idx,
-                                                        np.product(domain_decomp),
-                                                        x1, x2 - 1, y1, y2 - 1, z1, z2 - 1))
-                            print("Removed {} points due to mask".format(grid_pts_len - grid_pts.shape[1]))
+                        self.message(
+                            "[{}] Domain {}/{}, Index Limits: x = ({}, {}), y = ({}, {}), z = ({}, {})".format(
+                                time.strftime('%H:%M:%S', time.gmtime(int(time.time() - _ts))), domain_idx,
+                                np.product(domain_decomp), x1, x2 - 1, y1, y2 - 1, z1, z2 - 1))
+                        self.message("Removed {} points due to mask".format(grid_pts_len - grid_pts.shape[1]))
 
                         temp_pot = bempp.api.operators.potential.laplace.single_layer(dp0_space, grid_pts) * n_fun
 
-                        # Create array of original shape and fill with result at right place, then move into master array
+                        # Create array of original shape and fill with result at right place,
+                        # then move into master array
                         _pot = np.zeros(grid_pts_len)
 
                         _pot[~local_mask] = temp_pot[0]
