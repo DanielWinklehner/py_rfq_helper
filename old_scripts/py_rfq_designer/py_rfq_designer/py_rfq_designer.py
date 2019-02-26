@@ -2436,7 +2436,7 @@ class PyRFQ(object):
         if RANK == 0:
             slp = bempp.api.operators.boundary.laplace.single_layer(dp0_space, dp0_space, dp0_space)
             neumann_fun, info = bempp.api.linalg.gmres(slp, dirichlet_fun, tol=1e-6, use_strong_form=True)
-            mpi_data = {"nfun": neumann_fun,
+            mpi_data = {"n_coeff": neumann_fun.coefficients,
                         "info": info}
         else:
             mpi_data = None
@@ -2445,7 +2445,7 @@ class PyRFQ(object):
 
         COMM.barrier()
 
-        self._variables_bempp["n_fun_coeff"] = mpi_data["nfun"].coefficients
+        self._variables_bempp["n_fun_coeff"] = mpi_data["n_coeff"]
 
         return 0
 
@@ -2495,31 +2495,25 @@ class PyRFQ(object):
                     local_vanes[i] = self._worker_generate_vane_profile(_vane)
 
         else:
-
             if RANK == 0:
-                print("Proc {} working on vane {}".format(RANK, local_vanes[0].vane_type))
-                sys.stdout.flush()
+                self.message("Proc {} working on vane {}".format(RANK, local_vanes[0].vane_type), rank=RANK)
                 _vane = self._worker_generate_vane_profile(local_vanes[0])
                 mpi_data = {"vanes": [_vane, COMM.recv(source=1)]}
             elif RANK == 1:
-                print("Proc {} working on vane {}".format(RANK, local_vanes[1].vane_type))
-                sys.stdout.flush()
+                self.message("Proc {} working on vane {}".format(RANK, local_vanes[1].vane_type), rank=RANK)
                 _vane = self._worker_generate_vane_profile(local_vanes[1])
                 COMM.send(_vane, dest=0)
                 mpi_data = None
             else:
                 if self._debug:
-                    print("Proc {} idle.".format(RANK))
-                    sys.stdout.flush()
+                    self.message("Proc {} idle.".format(RANK), rank=RANK)
                 mpi_data = None
 
             mpi_data = COMM.bcast(mpi_data, root=0)
             local_vanes = mpi_data["vanes"]
 
         # --- Now make copies, set vane_type
-        if RANK == 0:
-            print("Copying vanes.")
-            sys.stdout.flush()
+        self.message("Copying vanes...")
 
         for i, vane_type in enumerate(["ym", "xm"]):
             new_vane = copy.deepcopy(local_vanes[i])  # First one is y direction
@@ -3174,6 +3168,8 @@ if __name__ == "__main__":
     r_vane = 0.0093
     h_vane = 0.05
     nz = 750
+    grid_res = 0.005
+    pot_res = 0.005
 
     # --- Jungbae's RFQ Design with RMS section
     myrfq = PyRFQ(voltage=22000.0, fudge_vanes=True, debug=mydebug)
@@ -3237,7 +3233,7 @@ if __name__ == "__main__":
     # myrfq.set_bempp_parameter("add_endplates", True)  # TODO: Correct handling of OCC objects for endplates
     # myrfq.set_bempp_parameter("cyl_id", 0.12)
     myrfq.set_bempp_parameter("reverse_mesh", True)
-    myrfq.set_bempp_parameter("grid_res", 0.001)  # characteristic mesh size during initial meshing
+    myrfq.set_bempp_parameter("grid_res", grid_res)  # characteristic mesh size during initial meshing
     myrfq.set_bempp_parameter("refine_steps", 0)  # number of times gmsh is called to "refine by splitting"
 
     myrfq.set_geometry_parameter("vane_radius", r_vane)
@@ -3317,8 +3313,7 @@ if __name__ == "__main__":
 
     myrfq.message("Calculating Mask & Potential...")
     ts = time.time()
-    _myres = 0.001
-    myres = [_myres, _myres, _myres]
+    myres = [pot_res, pot_res, pot_res]
     rlim = 0.02
     xlims = (-rlim, rlim)
     ylims = (-rlim, rlim)
