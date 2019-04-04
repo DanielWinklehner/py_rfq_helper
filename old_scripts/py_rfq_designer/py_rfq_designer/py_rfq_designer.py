@@ -58,6 +58,7 @@ try:
     HOST = MPI.Get_processor_name()
 
     print("Process {} of {} on host {} started!".format(RANK + 1, SIZE, HOST))
+    sys.stdout.flush()
 
 except ImportError:
 
@@ -104,7 +105,7 @@ except ImportError:
     print("Something went wrong during OCC import. No CAD support possible!")
 
 USE_MULTIPROC = True  # In case we are not using mpi or only using 1 processor, fall back on multiprocessing
-GMSH_EXE = "/home/daniel/src/gmsh4/bin/gmsh"
+GMSH_EXE = "/home/daniel/src/gmsh-4.0.6-Linux64/bin/gmsh"
 # GMSH_EXE = "E:/gmsh4/gmsh.exe"
 HAVE_TEMP_FOLDER = False
 np.set_printoptions(threshold=10000)

@@ -1,13 +1,9 @@
-import sys
 from warp import *
-import matplotlib.pyplot as plt
-import numpy as np
-import scipy.constants as const
-#from field_from_two_term_potential import *
-from py_rfq_designer import *
+from .py_rfq_designer import *
 
 # FILENAME = "vecc_rfq_003_py.dat"
 # FILENAME = "vecc_rfq_004_py.dat"
+
 
 class FieldLoader(object):
     def __init__(self):

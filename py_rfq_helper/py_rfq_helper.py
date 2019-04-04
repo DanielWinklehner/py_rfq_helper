@@ -14,7 +14,8 @@
 #       
 
 from warp import *
-from field import *
+from .field import *
+
 
 class RFQ(object):
     def __init__(self,
@@ -35,7 +36,6 @@ class RFQ(object):
         self._twoterm        = twoterm
         self._boundarymethod = boundarymethod
 
-
         #     Must be set outside of object creation
         self.simple_rods    = True
         self.vane_radius    = None
@@ -51,7 +51,6 @@ class RFQ(object):
         self.tt_frequency  = None
         self.tt_a_init     = None
         self.xy_limits     = None
-
 
         # Bempp variables
         self.add_endplates = True
