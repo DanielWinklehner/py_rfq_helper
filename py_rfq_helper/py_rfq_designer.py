@@ -22,6 +22,7 @@ import gc
 import time
 from scipy import meshgrid
 from dans_pymodules import *
+from .field import FieldLoader
 
 # Check if we can connect to a display, if not disable all plotting and windowed stuff (like gmsh)
 # TODO: This does not remotely cover all cases!
@@ -2449,7 +2450,6 @@ class PyRFQVane(object):
 
         self._grid = grid
 
-import field
 
 # noinspection PyUnresolvedReferences
 class PyRFQ(object):
@@ -2531,7 +2531,7 @@ class PyRFQ(object):
 
         # "Private" variables
         self._conductors    = None
-        self._field         = field.FieldLoader()
+        self._field         = FieldLoader()
         self._sim_end       = 0.0
         self._length        = 0.0
         self._fieldzmax     = 0.0
