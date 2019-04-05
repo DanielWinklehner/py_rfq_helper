@@ -4,7 +4,7 @@
 # noinspection PyUnresolvedReferences
 from warp import *
 from dans_pymodules import *
-from .field import *
+from .field_utils import *
 
 # Check if we can connect to a display, if not disable all plotting and windowed stuff (like gmsh)
 # TODO: This does not remotely cover all cases!
@@ -3639,12 +3639,12 @@ class PyRFQ(object):
             self._ray.append(val)
             return val
 
-        egrd = field.addnewegrddataset(ex=self._field._ex, 
-                         ey=self._field._ey,
-                         ez=self._field._ez,
-                         dx=self._field._dx,
-                         dy=self._field._dy,
-                         zlength=self._field._z_length)
+        egrd = field.addnewegrddataset(ex=self._field._ex,
+                                       ey=self._field._ey,
+                                       ez=self._field._ez,
+                                       dx=self._field._dx,
+                                       dy=self._field._dy,
+                                       zlength=self._field._z_length)
         # installs the field with the scaling function fieldscaling
         addnewegrd(id=egrd, zs=0, xs=self._field._xmin, ys=self._field._ymin, ze=self._field._z_length, func=fieldscaling)
 

@@ -15,7 +15,7 @@
 
 # noinspection PyUnresolvedReferences
 from warp import *
-from .field import *
+from .field_utils import *
 
 
 class RFQ(object):
@@ -30,42 +30,41 @@ class RFQ(object):
         # Vane distance
         # Start position of the RFQ
 
-        # User Parameters
-        #     Passed in via constructor
-        self._from_cells     = from_cells
-        self._filename       = filename
-        self._twoterm        = twoterm
+        # User Parameters (passed in via constructor)
+        self._from_cells = from_cells
+        self._filename = filename
+        self._twoterm = twoterm
         self._boundarymethod = boundarymethod
 
-        #     Must be set outside of object creation
-        self.simple_rods    = True
-        self.vane_radius    = None
-        self.vane_distance  = None
-        self.rf_freq        = None
-        self.zstart         = 0.0
-        self.sim_start      = 0.0
+        # Must be set outside of object creation
+        self.simple_rods = True
+        self.vane_radius = None
+        self.vane_distance = None
+        self.rf_freq = None
+        self.zstart = 0.0
+        self.sim_start = 0.0
         self.sim_end_buffer = 0.0
-        self.resolution     = 0.002
+        self.resolution = 0.002
 
         # Two term variables
-        self.tt_voltage    = None
-        self.tt_frequency  = None
-        self.tt_a_init     = None
-        self.xy_limits     = None
+        self.tt_voltage = None
+        self.tt_frequency = None
+        self.tt_a_init = None
+        self.xy_limits = None
 
         # Bempp variables
         self.add_endplates = True
-        self.cyl_id        = None
+        self.cyl_id = None
         self.grid_res_bempp = None
-        self.pot_shift      = None
+        self.pot_shift = None
 
         # "Private" variables
-        self._conductors    = None
-        self._field         = FieldLoader()
-        self._sim_end       = 0.0
+        self._conductors = None
+        self._field = FieldLoader()
+        self._sim_end = 0.0
 
         # Debugging
-        self._ray           = [] #debugging
+        self._ray = []  # debugging
 
     def install(self):
         # Parameters: None
