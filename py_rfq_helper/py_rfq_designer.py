@@ -3,7 +3,7 @@
 
 # noinspection PyUnresolvedReferences
 from warp import *
-from dans_pymodules import *
+# from dans_pymodules import *
 from .field_utils import *
 
 # Check if we can connect to a display, if not disable all plotting and windowed stuff (like gmsh)
@@ -2170,7 +2170,6 @@ class PyRFQVane(object):
         self._mesh.plot()
 
         return 0
-
 
     # two term functions from field_from_two_term_potential.py
     def __add__(self, other):
