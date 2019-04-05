@@ -2722,7 +2722,6 @@ class PyRFQ(object):
         self._cell_nos = range(len(self._cells))
         self._length = np.sum([cell.length for cell in self._cells])
 
-
     def calculate_efield(self):
         # TODO: missing parameters (_d)
 
@@ -3564,7 +3563,6 @@ class PyRFQ(object):
         ##########################
         exit(1)
 
-
     def setup(self):
         # Parameters: None
         # Returns: None
@@ -3609,7 +3607,6 @@ class PyRFQ(object):
                     print("Please provide z limits (z_limits) for BEMPP calculation.")
                     exit(1)
 
-
         if self._from_cells:
             if (self._twoterm):
                 self._field.load_field_from_cells_tt(self._voltage, 
@@ -3627,7 +3624,6 @@ class PyRFQ(object):
         else:
             self._field.load_field_from_file(self._filename)
 
-
     def import_field(self):
         # import_field
         # Parameters: none
@@ -3639,14 +3635,17 @@ class PyRFQ(object):
             self._ray.append(val)
             return val
 
-        egrd = field.addnewegrddataset(ex=self._field._ex,
-                                       ey=self._field._ey,
-                                       ez=self._field._ez,
-                                       dx=self._field._dx,
-                                       dy=self._field._dy,
-                                       zlength=self._field._z_length)
+        egrd = addnewegrddataset(ex=self._field._ex,
+                                 ey=self._field._ey,
+                                 ez=self._field._ez,
+                                 dx=self._field._dx,
+                                 dy=self._field._dy,
+                                 zlength=self._field._z_length)
+
         # installs the field with the scaling function fieldscaling
-        addnewegrd(id=egrd, zs=0, xs=self._field._xmin, ys=self._field._ymin, ze=self._field._z_length, func=fieldscaling)
+        addnewegrd(id=egrd, zs=0,
+                   xs=self._field._xmin, ys=self._field._ymin,
+                   ze=self._field._z_length, func=fieldscaling)
 
     def create_vanes(self):
         # create_vanes
@@ -3692,7 +3691,6 @@ class PyRFQ(object):
         plotegrd(component="y", iy=self._field._ny, ix=self._field._nx)
         fma()
 
-        
         # plotegrd(component="x", iz=50)
         # fma()
         #plotegrd(component="y", iz=50)
@@ -3710,14 +3708,6 @@ class PyRFQ(object):
             self._field.add_cell(cell_type, aperture, modulation, length, flip_z, shift_cell_no)
         elif (self._boundarymethod):
             self.append_cell(cell_type, aperture, modulation, length, flip_z=flip_z, shift_cell_no=shift_cell_no)
-
-
-
-
-
-
-
-
 
 
 if __name__ == "__main__":
@@ -3742,87 +3732,6 @@ if __name__ == "__main__":
                       aperture=0.0095691183,
                       modulation=1.0,
                       length=0.1)
-
-    # myrfq.append_cell(cell_type="STA",
-    #                   aperture=0.0095691183,
-    #                   modulation=1.0,
-    #                   length=0.0)
-    #
-    # myrfq.append_cell(cell_type="RMS",
-    #                   aperture=0.010944,
-    #                   modulation=1.0,
-    #                   length=0.018339)
-    #
-    # myrfq.append_cell(cell_type="RMS",
-    #                   aperture=0.016344,
-    #                   modulation=1.0,
-    #                   length=0.018339)
-    #
-    # myrfq.append_cell(cell_type="RMS",
-    #                   aperture=0.041051,
-    #                   modulation=1.0,
-    #                   length=0.018339)
-    #
-    # myrfq.append_cell(cell_type="RMS",
-    #                   aperture=0.150000,
-    #                   modulation=1.0,
-    #                   length=0.018339)
-
-    # myrfq.add_cells_from_file(filename="/mnt/c/Users/Daniel Winklehner/Dropbox (MIT)/Code/Python/"
-    #                                    "py_rfq_designer/py_rfq_designer/Parm_50_63cells.dat")
-
-    # Add some more cells for transition, drift and re-bunching
-    # myrfq.append_cell(cell_type="TCS",
-    #                   aperture=0.011255045027294745,
-    #                   modulation=1.6686390559337798,
-    #                   length=0.0427)
-
-    # myrfq.append_cell(cell_type="DCS",
-    #                   aperture=0.015017826368066015,
-    #                   modulation=0.9988129861386651,
-    #                   length=0.13)
-    #
-    # myrfq.append_cell(cell_type="TCS",
-    #                   aperture=0.01,
-    #                   modulation=2.0,
-    #                   length=0.041,
-    #                   flip_z=True)
-    #
-    # myrfq.append_cell(cell_type="TCS",
-    #                   aperture=0.01,
-    #                   modulation=2.0,
-    #                   length=0.041,
-    #                   shift_cell_no=True)
-    #
-    # myrfq.append_cell(cell_type="RMS",
-    #                   aperture=0.015,
-    #                   modulation=1.0,
-    #                   length=0.01828769716079613)
-    #
-    # myrfq.append_cell(cell_type="RMS",
-    #                   aperture=0.015192005013805875,
-    #                   modulation=1.0,
-    #                   length=0.01828769716079613)
-    #
-    # myrfq.append_cell(cell_type="RMS",
-    #                   aperture=0.01604070586606224,
-    #                   modulation=1.0,
-    #                   length=0.01828769716079613)
-    #
-    # myrfq.append_cell(cell_type="RMS",
-    #                   aperture=0.01774325365260171,
-    #                   modulation=1.0,
-    #                   length=0.01828769716079613)
-    #
-    # myrfq.append_cell(cell_type="RMS",
-    #                   aperture=0.021077138259769042,
-    #                   modulation=1.0,
-    #                   length=0.01828769716079613)
-    #
-    # myrfq.append_cell(cell_type="RMS",
-    #                   aperture=0.02919376887767351,
-    #                   modulation=0.038802 / 0.02919376887767351,
-    #                   length=0.01828769716079613)
 
     myrfq.set_bempp_parameter("add_endplates", True)
     myrfq.set_bempp_parameter("cyl_id", 0.1)
@@ -3870,7 +3779,6 @@ if __name__ == "__main__":
     print("Potential took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
 
     myrfq.calculate_efield()
-
 
     # import pickle
 

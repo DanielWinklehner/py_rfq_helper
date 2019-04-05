@@ -1,7 +1,7 @@
 from warp import *
-from py_rfq_helper import *
-from py_rfq_designer import *
-from py_rfq_utils import *
+from py_rfq_helper.py_rfq_helper import *
+from py_rfq_helper.py_rfq_designer import *
+from py_rfq_helper.py_rfq_utils import *
 import bisect
 import time
 import pprint
@@ -137,28 +137,26 @@ top.injctspc = 1000000
 # RFQ creation and initialization of parameters
 
 rfq = PyRFQ(filename=FILENAME, from_cells=False, twoterm=True, boundarymethod=False)
-rfq.vane_radius       = VANE_RAD
-rfq.vane_distance     = VANE_DIST
-rfq.zstart            = Z_START
-rfq.rf_freq           = RF_FREQ
-rfq.sim_start         = SIM_START
-rfq.sim_end_buffer    = 0.5
-rfq.resolution        = 0.002
+rfq.vane_radius = VANE_RAD
+rfq.vane_distance = VANE_DIST
+rfq.zstart = Z_START
+rfq.rf_freq = RF_FREQ
+rfq.sim_start = SIM_START
+rfq.sim_end_buffer = 0.5
+rfq.resolution = 0.002
 rfq.endplates = False
 
-rfq.xy_limits         = [-0.03, 0.03, -0.03, 0.03]
-rfq.z_limits          = [0, 1.4]
-rfq._voltage          = 22e3
-rfq.tt_a_init         = 0.038802
+rfq.xy_limits = [-0.03, 0.03, -0.03, 0.03]
+rfq.z_limits = [0, 1.4]
+rfq._voltage = 22e3
+rfq.tt_a_init = 0.038802
 
 # rfq.add_endplates  = True
 # rfq.cyl_id         = 0.1
 # rfq.grid_res_bempp = 0.005 
 # rfq.pot_shift      = 3.0 * 22000.0
-rfq.ignore_rms     = False
-
-
-rfq.simple_rods    = True
+rfq.ignore_rms = False
+rfq.simple_rods = True
 
 rfq.setup()
 
@@ -173,8 +171,6 @@ rfq.setup()
 #             aperture=0.015017826368066015,
 #             modulation=1.0,
 #             length=0.13)
-
-
 
 rfq.install()
 
@@ -210,8 +206,8 @@ for pd in pds:
     print(pd.ion)
     print(pd.calculate_emittances()["summary"])
 
-pp = Species(type=Proton, charge_state=pd[0].ion.z(), name=pd[0].ion.name())
-h2p = Species(type=Dihydrogen, charge_state=pd[1].ion.z(), name=pd[1].ion.name())
+# pp = Species(type=Proton, charge_state=pd[0].ion.z(), name=pd[0].ion.name())
+beam = Species(type=Dihydrogen, charge_state=pd[1].ion.z(), name=pd[1].ion.name())
 
 
 top.lrelativ = False
@@ -235,7 +231,6 @@ exit()
 # beam.b0  = 5 * mm  # initial y-envelope edge b = 2*sqrt(<(y-yc)^2>) [m]
 # beam.ap0 = -0.06 # initial x-envelope angle ap = a' = d a/ds [rad]
 # beam.bp0 = -0.06  # initial y-envelope angle bp = b' = d b/ds [rad]
-
 
 utils = PyRfqUtils(rfq, beam)
 
