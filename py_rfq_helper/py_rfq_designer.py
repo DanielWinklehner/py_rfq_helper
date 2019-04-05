@@ -5,6 +5,7 @@
 from warp import *
 # from dans_pymodules import *
 from .field_utils import *
+import scipy.constants as const
 
 # Check if we can connect to a display, if not disable all plotting and windowed stuff (like gmsh)
 # TODO: This does not remotely cover all cases!
@@ -1980,155 +1981,155 @@ class PyRFQVane(object):
 
         return gmsh_str
 
-    def calculate_mesh(self, dx=None):
-
-        if dx is not None:
-            self._mesh_params["dx"] = dx
-        else:
-            dx = self._mesh_params["dx"]
-
-        zmin = 0.0  # For now, RFQ vanes always start at 0.0, everything is relative
-        zmax = self._length
-        numz = np.round((zmax - zmin) / dx, 0) + 1
-
-        r_tip = self._mesh_params["r_tip"]
-        h_block = self._mesh_params["h_block"]
-
-        # Calculate z_data and vane profile:
-        z, vane = self.get_profile(nz=numz)
-
-        if self._mesh_params["tip"] == "semi-circle":
-            # Calculate approximate angular resolution corresponding to desired mesh size
-            num_phi = np.round(r_tip * np.pi / dx, 0)
-            phi = np.pi / num_phi
-
-            print("With mesh_size {} m, we have {} points per semi-circle".format(dx, num_phi))
-
-            # We need two sets of phi values so that subsequent z positions form triangles rather than squares
-            phi_set = [np.linspace(np.pi, 2.0 * np.pi, num_phi),
-                       np.linspace(np.pi + 0.5 * phi, 2.0 * np.pi - 0.5 * phi, num_phi - 1)]
-
-            # maximum vertical extent:
-            ymax = r_tip + np.max(vane) + h_block
-            print("Maximum vertical extent: {} m".format(ymax))
-            # TODO: Think about whether it's a good idea to use only half the mesh size on block part
-            num_vert_pts = int(np.round((ymax - r_tip - np.min(vane)) / 2.0 / dx, 0))
-            print("Number of points in vertical direction: {}".format(num_vert_pts))
-            num_horz_pts = int(np.round(2.0 * r_tip / 2.0 / dx, 0)) - 1  # Not counting corners
-            horz_step_size = (2.0 * r_tip) / (num_horz_pts + 1)
-
-            # Create point cloud for testing
-            points = []
-            for i, _z in enumerate(z):
-
-                # Create curved surface points:
-                for _phi in phi_set[int(i % 2.0)]:
-                    points.append((r_tip * np.cos(_phi),
-                                   r_tip * np.sin(_phi) + r_tip + vane[i],
-                                   _z))
-
-                # Create straight lines points:
-                # Looking with z, we start at the right end of the curvature and go up-left-down
-                vert_step = (ymax - r_tip - vane[i]) / num_vert_pts
-
-                # If we are in phi_set 0, we start one step up, in phi set 1 a half step up
-                for j in range(num_vert_pts):
-                    points.append((r_tip, points[-1][1] + vert_step, _z))
-
-                if i % 2.0 == 0.0:
-                    points.pop(-1)
-
-                # Append the corner point
-                points.append((r_tip, ymax, _z))
-
-                if i % 2.0 == 0.0:
-                    for j in range(num_horz_pts + 1):
-                        points.append((r_tip + 0.5 * horz_step_size - (j + 1) * horz_step_size, ymax, _z))
-                else:
-                    for j in range(num_horz_pts):
-                        points.append((r_tip - (j + 1) * horz_step_size, ymax, _z))
-
-                # Append the corner point
-                points.append((-r_tip, ymax, _z))
-
-                # Finish up by going down on the left side
-                for j in range(num_vert_pts):
-                    points.append((-r_tip, ymax - (j + 1) * vert_step + 0.5 * (i % 2.0) * vert_step, _z))
-
-                if i % 2.0 == 0.0:
-                    points.pop(-1)
-
-            points = np.array(points, dtype=[("x", float), ("y", float), ("z", float)])
-
-            # Apply rotation
-            rot = rot_map[self._type]
-
-            if rot != 0.0:
-                angle = rot * np.pi / 180.0
-
-                x_old = points["x"].copy()
-                y_old = points["y"].copy()
-
-                points["x"] = x_old * np.cos(angle) - y_old * np.sin(angle)
-                points["y"] = x_old * np.sin(angle) + y_old * np.cos(angle)
-
-                del x_old
-                del y_old
-
-            points_per_slice = len(np.where(points["z"] == z[0])[0])
-            print("Points per slice = {}".format(points_per_slice))
-
-            # For each point, there need to be lines created to neighbors
-            elements = []
-            for i, point in enumerate(points[:-points_per_slice]):
-                # Each element contains the indices of the bounding vertices
-                slice_no = int(i / points_per_slice)
-                # print(i, slice_no, int(slice_no % 2))
-
-                if slice_no % 2 == 0.0:
-
-                    if (i + 1) % points_per_slice != 0.0:
-                        elements.append([i, i + 1, i + points_per_slice])
-                    else:
-                        elements.append(
-                            [i, i + points_per_slice, i + 1 - points_per_slice])
-
-                    if i % points_per_slice != 0.0:
-                        elements.append(
-                            [i, i + points_per_slice - 1, i + points_per_slice])
-                    else:
-                        elements.append(
-                            [i, i + points_per_slice, i + 2 * points_per_slice - 1])
-
-                else:
-
-                    if (i + 1) % points_per_slice != 0.0:
-                        # Regular element
-                        elements.append([i, i + 1, i + points_per_slice + 1])
-                        elements.append([i, i + points_per_slice, i + points_per_slice + 1])
-                    else:
-                        # Last element of level
-                        elements.append([i, i + 1 - points_per_slice, i + 1])
-                        elements.append([i, i + 1, i + points_per_slice])
-
-            vertices = np.array([points["x"], points["y"], points["z"]])
-            elements = np.array(elements).T
-
-            # Test bempp calculation for single vane
-            if bempp is not None:
-                # noinspection PyUnresolvedReferences
-                self._mesh = bempp.api.grid.grid_from_element_data(vertices, elements)
-
-                # if self._debug:
-                #     self._mesh.plot()
-
-            else:
-                return 0
-
-        else:
-            print("The vane type '{}' is not (yet) implemented. Aborting.".format(self._mesh_params["tip"]))
-            return 1
-        return 0
+    # def calculate_mesh(self, dx=None):
+    #
+    #     if dx is not None:
+    #         self._mesh_params["dx"] = dx
+    #     else:
+    #         dx = self._mesh_params["dx"]
+    #
+    #     zmin = 0.0  # For now, RFQ vanes always start at 0.0, everything is relative
+    #     zmax = self._length
+    #     numz = np.round((zmax - zmin) / dx, 0) + 1
+    #
+    #     r_tip = self._mesh_params["r_tip"]
+    #     h_block = self._mesh_params["h_block"]
+    #
+    #     # Calculate z_data and vane profile:
+    #     z, vane = self.get_profile(nz=numz)
+    #
+    #     if self._mesh_params["tip"] == "semi-circle":
+    #         # Calculate approximate angular resolution corresponding to desired mesh size
+    #         num_phi = np.round(r_tip * np.pi / dx, 0)
+    #         phi = np.pi / num_phi
+    #
+    #         print("With mesh_size {} m, we have {} points per semi-circle".format(dx, num_phi))
+    #
+    #         # We need two sets of phi values so that subsequent z positions form triangles rather than squares
+    #         phi_set = [np.linspace(np.pi, 2.0 * np.pi, num_phi),
+    #                    np.linspace(np.pi + 0.5 * phi, 2.0 * np.pi - 0.5 * phi, num_phi - 1)]
+    #
+    #         # maximum vertical extent:
+    #         ymax = r_tip + np.max(vane) + h_block
+    #         print("Maximum vertical extent: {} m".format(ymax))
+    #         # TODO: Think about whether it's a good idea to use only half the mesh size on block part
+    #         num_vert_pts = int(np.round((ymax - r_tip - np.min(vane)) / 2.0 / dx, 0))
+    #         print("Number of points in vertical direction: {}".format(num_vert_pts))
+    #         num_horz_pts = int(np.round(2.0 * r_tip / 2.0 / dx, 0)) - 1  # Not counting corners
+    #         horz_step_size = (2.0 * r_tip) / (num_horz_pts + 1)
+    #
+    #         # Create point cloud for testing
+    #         points = []
+    #         for i, _z in enumerate(z):
+    #
+    #             # Create curved surface points:
+    #             for _phi in phi_set[int(i % 2.0)]:
+    #                 points.append((r_tip * np.cos(_phi),
+    #                                r_tip * np.sin(_phi) + r_tip + vane[i],
+    #                                _z))
+    #
+    #             # Create straight lines points:
+    #             # Looking with z, we start at the right end of the curvature and go up-left-down
+    #             vert_step = (ymax - r_tip - vane[i]) / num_vert_pts
+    #
+    #             # If we are in phi_set 0, we start one step up, in phi set 1 a half step up
+    #             for j in range(num_vert_pts):
+    #                 points.append((r_tip, points[-1][1] + vert_step, _z))
+    #
+    #             if i % 2.0 == 0.0:
+    #                 points.pop(-1)
+    #
+    #             # Append the corner point
+    #             points.append((r_tip, ymax, _z))
+    #
+    #             if i % 2.0 == 0.0:
+    #                 for j in range(num_horz_pts + 1):
+    #                     points.append((r_tip + 0.5 * horz_step_size - (j + 1) * horz_step_size, ymax, _z))
+    #             else:
+    #                 for j in range(num_horz_pts):
+    #                     points.append((r_tip - (j + 1) * horz_step_size, ymax, _z))
+    #
+    #             # Append the corner point
+    #             points.append((-r_tip, ymax, _z))
+    #
+    #             # Finish up by going down on the left side
+    #             for j in range(num_vert_pts):
+    #                 points.append((-r_tip, ymax - (j + 1) * vert_step + 0.5 * (i % 2.0) * vert_step, _z))
+    #
+    #             if i % 2.0 == 0.0:
+    #                 points.pop(-1)
+    #
+    #         points = np.array(points, dtype=[("x", float), ("y", float), ("z", float)])
+    #
+    #         # Apply rotation
+    #         rot = rot_map[self._type]
+    #
+    #         if rot != 0.0:
+    #             angle = rot * np.pi / 180.0
+    #
+    #             x_old = points["x"].copy()
+    #             y_old = points["y"].copy()
+    #
+    #             points["x"] = x_old * np.cos(angle) - y_old * np.sin(angle)
+    #             points["y"] = x_old * np.sin(angle) + y_old * np.cos(angle)
+    #
+    #             del x_old
+    #             del y_old
+    #
+    #         points_per_slice = len(np.where(points["z"] == z[0])[0])
+    #         print("Points per slice = {}".format(points_per_slice))
+    #
+    #         # For each point, there need to be lines created to neighbors
+    #         elements = []
+    #         for i, point in enumerate(points[:-points_per_slice]):
+    #             # Each element contains the indices of the bounding vertices
+    #             slice_no = int(i / points_per_slice)
+    #             # print(i, slice_no, int(slice_no % 2))
+    #
+    #             if slice_no % 2 == 0.0:
+    #
+    #                 if (i + 1) % points_per_slice != 0.0:
+    #                     elements.append([i, i + 1, i + points_per_slice])
+    #                 else:
+    #                     elements.append(
+    #                         [i, i + points_per_slice, i + 1 - points_per_slice])
+    #
+    #                 if i % points_per_slice != 0.0:
+    #                     elements.append(
+    #                         [i, i + points_per_slice - 1, i + points_per_slice])
+    #                 else:
+    #                     elements.append(
+    #                         [i, i + points_per_slice, i + 2 * points_per_slice - 1])
+    #
+    #             else:
+    #
+    #                 if (i + 1) % points_per_slice != 0.0:
+    #                     # Regular element
+    #                     elements.append([i, i + 1, i + points_per_slice + 1])
+    #                     elements.append([i, i + points_per_slice, i + points_per_slice + 1])
+    #                 else:
+    #                     # Last element of level
+    #                     elements.append([i, i + 1 - points_per_slice, i + 1])
+    #                     elements.append([i, i + 1, i + points_per_slice])
+    #
+    #         vertices = np.array([points["x"], points["y"], points["z"]])
+    #         elements = np.array(elements).T
+    #
+    #         # Test bempp calculation for single vane
+    #         if bempp is not None:
+    #             # noinspection PyUnresolvedReferences
+    #             self._mesh = bempp.api.grid.grid_from_element_data(vertices, elements)
+    #
+    #             # if self._debug:
+    #             #     self._mesh.plot()
+    #
+    #         else:
+    #             return 0
+    #
+    #     else:
+    #         print("The vane type '{}' is not (yet) implemented. Aborting.".format(self._mesh_params["tip"]))
+    #         return 1
+    #     return 0
 
     def calculate_profile(self, fudge=None):
 
@@ -2172,216 +2173,216 @@ class PyRFQVane(object):
         return 0
 
     # two term functions from field_from_two_term_potential.py
-    def __add__(self, other):
+    # def __add__(self, other):
+    #
+    #     assert self.has_grid() and other.has_grid(), \
+    #         "Can only add two vanes with computed grids. Use generate_grid() first!"
+    #
+    #     # TODO: Collision detection???
+    #
+    #     vertices1, elements1 = self._grid.leaf_view.vertices, self._grid.leaf_view.elements
+    #     no_vert_grid1 = vertices1.shape[1]
+    #
+    #     vertices2, elements2 = other.get_grid().leaf_view.vertices, other.get_grid().leaf_view.elements
+    #
+    #     vertices = np.append(vertices1, vertices2, axis=1)
+    #     elements = np.append(elements1, elements2 + no_vert_grid1, axis=1)
+    #
+    #     # Adding together two Vane objects makes vane_z_data and vane_y_data obsolete
+    #     new_vane = Vane(vane_type=self._vane_type,
+    #                     mesh_size=self._mesh_size,
+    #                     curvature=self._curvature,
+    #                     height=self._height,
+    #                     vane_z_data=None,
+    #                     vane_y_data=None,
+    #                     debug=self._debug)
+    #
+    #     import bempp.api
+    #
+    #     new_vane.set_grid(bempp.api.grid.grid_from_element_data(vertices, elements))
+    #
+    #     return new_vane
 
-        assert self.has_grid() and other.has_grid(), \
-            "Can only add two vanes with computed grids. Use generate_grid() first!"
-
-        # TODO: Collision detection???
-
-        vertices1, elements1 = self._grid.leaf_view.vertices, self._grid.leaf_view.elements
-        no_vert_grid1 = vertices1.shape[1]
-
-        vertices2, elements2 = other.get_grid().leaf_view.vertices, other.get_grid().leaf_view.elements
-
-        vertices = np.append(vertices1, vertices2, axis=1)
-        elements = np.append(elements1, elements2 + no_vert_grid1, axis=1)
-
-        # Adding together two Vane objects makes vane_z_data and vane_y_data obsolete
-        new_vane = Vane(vane_type=self._vane_type,
-                        mesh_size=self._mesh_size,
-                        curvature=self._curvature,
-                        height=self._height,
-                        vane_z_data=None,
-                        vane_y_data=None,
-                        debug=self._debug)
-
-        import bempp.api
-
-        new_vane.set_grid(bempp.api.grid.grid_from_element_data(vertices, elements))
-
-        return new_vane
-
-    def generate_grid(self, mesh_size=None):
-
-        if mesh_size is not None:
-            self._mesh_size = mesh_size
-
-        zmin = np.min(self._vane_z_data)
-        zmax = np.max(self._vane_z_data)
-        numz = np.round((zmax - zmin) / self._mesh_size, 0) + 1
-
-        if numz == len(self._vane_z_data):
-
-            vane_z_data = self._vane_z_data
-            vane_y_data = self._vane_y_data
-
-        else:
-            vane_interp = interp1d(self._vane_z_data, self._vane_y_data)
-            vane_z_data = np.linspace(zmin, zmax, numz)
-            vane_y_data = vane_interp(vane_z_data)
-
-        if self._vane_type == "semi-circle":
-            # Calculate approximate angular resolution corresponding to desired mesh size
-            num_phi = np.round(self._curvature * np.pi / self._mesh_size, 0)
-            phi = np.pi / num_phi
-
-            print("With mesh_size {} m, we have {} points per semi-circle".format(self._mesh_size, num_phi))
-
-            # We need two sets of phi values so that subsequent z positions form triangles rather than squares
-            phi_set = [np.linspace(np.pi, 2.0 * np.pi, num_phi),
-                       np.linspace(np.pi + 0.5 * phi, 2.0 * np.pi - 0.5 * phi, num_phi - 1)]
-
-            # maximum vertical extent:
-            ymax = self._curvature + np.max(vane_y_data) + self._height
-            print("Maximum vertical extent: {} m".format(ymax))
-            # TODO: Think about whether it's a good idea to use only half the mesh size on block part
-            num_vert_pts = int(np.round((ymax - self._curvature - np.min(vane_y_data)) / 2.0 / self._mesh_size, 0))
-            print("Number of points in vertical direction: {}".format(num_vert_pts))
-            num_horz_pts = int(np.round(2.0 * self._curvature / 2.0 / self._mesh_size, 0)) - 1  # Not counting corners
-            horz_step_size = (2.0 * self._curvature) / (num_horz_pts + 1)
-
-            # Create point cloud for testing
-            points = []
-            for i, _z in enumerate(vane_z_data):
-
-                # Create curved surface points:
-                for _phi in phi_set[int(i % 2.0)]:
-                    points.append((self._curvature * np.cos(_phi),
-                                   self._curvature * np.sin(_phi) + self._curvature + vane_y_data[i],
-                                   _z))
-
-                # Create straight lines points:
-                # Looking with z, we start at the right end of the curvature and go up-left-down
-                vert_step = (ymax - self._curvature - vane_y_data[i]) / num_vert_pts
-
-                # If we are in phi_set 0, we start one step up, in phi set 1 a half step up
-                for j in range(num_vert_pts):
-                    points.append((self._curvature, points[-1][1] + vert_step, _z))
-
-                if i % 2.0 == 0.0:
-                    points.pop(-1)
-
-                # Append the corner point
-                points.append((self._curvature, ymax, _z))
-
-                if i % 2.0 == 0.0:
-                    for j in range(num_horz_pts + 1):
-                        points.append((self._curvature + 0.5 * horz_step_size - (j + 1) * horz_step_size, ymax, _z))
-                else:
-                    for j in range(num_horz_pts):
-                        points.append((self._curvature - (j + 1) * horz_step_size, ymax, _z))
-
-                # Append the corner point
-                points.append((-self._curvature, ymax, _z))
-
-                # Finish up by going down on the left side
-                for j in range(num_vert_pts):
-                    points.append((-self._curvature, ymax - (j + 1) * vert_step + 0.5 * (i % 2.0) * vert_step, _z))
-
-                if i % 2.0 == 0.0:
-                    points.pop(-1)
-
-            points = np.array(points, dtype=[("x", float), ("y", float), ("z", float)])
-
-            # Apply rotation
-            if self._rotation != 0.0:
-
-                angle = self._rotation * np.pi / 180.0
-
-                x_old = points["x"].copy()
-                y_old = points["y"].copy()
-
-                points["x"] = x_old * np.cos(angle) - y_old * np.sin(angle)
-                points["y"] = x_old * np.sin(angle) + y_old * np.cos(angle)
-
-                del x_old
-                del y_old
-
-            points_per_slice = len(np.where(points["z"] == vane_z_data[0])[0])
-            print("Points per slice = {}".format(points_per_slice))
-
-            # For each point, there need to be lines created to neighbors
-            elements = []
-            for i, point in enumerate(points[:-points_per_slice]):
-                # Each element contains the indices of the bounding vertices
-                slice_no = int(i / points_per_slice)
-                # print(i, slice_no, int(slice_no % 2))
-
-                if slice_no % 2 == 0.0:
-
-                    if (i + 1) % points_per_slice != 0.0:
-                        elements.append([i, i + 1, i + points_per_slice])
-                    else:
-                        elements.append(
-                            [i, i + points_per_slice, i + 1 - points_per_slice])
-
-                    if i % points_per_slice != 0.0:
-                        elements.append(
-                            [i, i + points_per_slice - 1, i + points_per_slice])
-                    else:
-                        elements.append(
-                            [i, i + points_per_slice, i + 2 * points_per_slice - 1])
-
-                else:
-
-                    if (i + 1) % points_per_slice != 0.0:
-                        # Regular element
-                        elements.append([i, i + 1, i + points_per_slice + 1])
-                        elements.append([i, i + points_per_slice, i + points_per_slice + 1])
-                    else:
-                        # Last element of level
-                        elements.append([i, i + 1 - points_per_slice, i + 1])
-                        elements.append([i, i + 1, i + points_per_slice])
-
-            # get first slice indices
-            # idx = np.where(points[2] == vane_z_data[0])
-            # plt.scatter(points[0][idx], points[1][idx], color="blue")
-
-            # get second slice indices
-            # idx = np.where(points[2] == vane_z_data[1])
-            # plt.scatter(points[0][idx], points[1][idx], color="red")
-            #
-            # plt.gca().set_aspect('equal')
-
-            # from mpl_toolkits.mplot3d import Axes3D
-            # fig = plt.figure()
-            # ax = fig.add_subplot(111, projection='3d')
-            # for element in elements:
-            #     triangle = np.append(points[element], points[element[0]])
-            #     ax.plot(triangle["x"], triangle["y"], triangle["z"])
-            # # for i, point in enumerate(points):
-            # #     ax.scatter(point["x"], point["y"], point["z"], marker=r"${}$".format(i), s=49)
-            # ax.set_xlabel("x")
-            # ax.set_ylabel("y")
-            # ax.set_aspect("equal")
-            # plt.show()
-            #
-            # exit()
-
-            vertices = np.array([points["x"], points["y"], points["z"]])
-            elements = np.array(elements).T
-
-            # Test bem++ calculation for single vane
-            try:
-
-                import bempp.api
-
-            except ImportError as e:
-
-                print("Couldn't find module bempp. This only works in Linux environments!")
-                print("Error was: {}".format(e))
-                exit(1)
-
-            self._grid = bempp.api.grid.grid_from_element_data(vertices, elements)
-
-            if self._debug:
-
-                self._grid.plot()
-
-        else:
-            print("The vane type '{}' is not (yet) implemented. Aborting.".format(self._vane_type))
-            return 1
+    # def generate_grid(self, mesh_size=None):
+    #
+    #     if mesh_size is not None:
+    #         self._mesh_size = mesh_size
+    #
+    #     zmin = np.min(self._vane_z_data)
+    #     zmax = np.max(self._vane_z_data)
+    #     numz = np.round((zmax - zmin) / self._mesh_size, 0) + 1
+    #
+    #     if numz == len(self._vane_z_data):
+    #
+    #         vane_z_data = self._vane_z_data
+    #         vane_y_data = self._vane_y_data
+    #
+    #     else:
+    #         vane_interp = interp1d(self._vane_z_data, self._vane_y_data)
+    #         vane_z_data = np.linspace(zmin, zmax, numz)
+    #         vane_y_data = vane_interp(vane_z_data)
+    #
+    #     if self._vane_type == "semi-circle":
+    #         # Calculate approximate angular resolution corresponding to desired mesh size
+    #         num_phi = np.round(self._curvature * np.pi / self._mesh_size, 0)
+    #         phi = np.pi / num_phi
+    #
+    #         print("With mesh_size {} m, we have {} points per semi-circle".format(self._mesh_size, num_phi))
+    #
+    #         # We need two sets of phi values so that subsequent z positions form triangles rather than squares
+    #         phi_set = [np.linspace(np.pi, 2.0 * np.pi, num_phi),
+    #                    np.linspace(np.pi + 0.5 * phi, 2.0 * np.pi - 0.5 * phi, num_phi - 1)]
+    #
+    #         # maximum vertical extent:
+    #         ymax = self._curvature + np.max(vane_y_data) + self._height
+    #         print("Maximum vertical extent: {} m".format(ymax))
+    #         # TODO: Think about whether it's a good idea to use only half the mesh size on block part
+    #         num_vert_pts = int(np.round((ymax - self._curvature - np.min(vane_y_data)) / 2.0 / self._mesh_size, 0))
+    #         print("Number of points in vertical direction: {}".format(num_vert_pts))
+    #         num_horz_pts = int(np.round(2.0 * self._curvature / 2.0 / self._mesh_size, 0)) - 1  # Not counting corners
+    #         horz_step_size = (2.0 * self._curvature) / (num_horz_pts + 1)
+    #
+    #         # Create point cloud for testing
+    #         points = []
+    #         for i, _z in enumerate(vane_z_data):
+    #
+    #             # Create curved surface points:
+    #             for _phi in phi_set[int(i % 2.0)]:
+    #                 points.append((self._curvature * np.cos(_phi),
+    #                                self._curvature * np.sin(_phi) + self._curvature + vane_y_data[i],
+    #                                _z))
+    #
+    #             # Create straight lines points:
+    #             # Looking with z, we start at the right end of the curvature and go up-left-down
+    #             vert_step = (ymax - self._curvature - vane_y_data[i]) / num_vert_pts
+    #
+    #             # If we are in phi_set 0, we start one step up, in phi set 1 a half step up
+    #             for j in range(num_vert_pts):
+    #                 points.append((self._curvature, points[-1][1] + vert_step, _z))
+    #
+    #             if i % 2.0 == 0.0:
+    #                 points.pop(-1)
+    #
+    #             # Append the corner point
+    #             points.append((self._curvature, ymax, _z))
+    #
+    #             if i % 2.0 == 0.0:
+    #                 for j in range(num_horz_pts + 1):
+    #                     points.append((self._curvature + 0.5 * horz_step_size - (j + 1) * horz_step_size, ymax, _z))
+    #             else:
+    #                 for j in range(num_horz_pts):
+    #                     points.append((self._curvature - (j + 1) * horz_step_size, ymax, _z))
+    #
+    #             # Append the corner point
+    #             points.append((-self._curvature, ymax, _z))
+    #
+    #             # Finish up by going down on the left side
+    #             for j in range(num_vert_pts):
+    #                 points.append((-self._curvature, ymax - (j + 1) * vert_step + 0.5 * (i % 2.0) * vert_step, _z))
+    #
+    #             if i % 2.0 == 0.0:
+    #                 points.pop(-1)
+    #
+    #         points = np.array(points, dtype=[("x", float), ("y", float), ("z", float)])
+    #
+    #         # Apply rotation
+    #         if self._rotation != 0.0:
+    #
+    #             angle = self._rotation * np.pi / 180.0
+    #
+    #             x_old = points["x"].copy()
+    #             y_old = points["y"].copy()
+    #
+    #             points["x"] = x_old * np.cos(angle) - y_old * np.sin(angle)
+    #             points["y"] = x_old * np.sin(angle) + y_old * np.cos(angle)
+    #
+    #             del x_old
+    #             del y_old
+    #
+    #         points_per_slice = len(np.where(points["z"] == vane_z_data[0])[0])
+    #         print("Points per slice = {}".format(points_per_slice))
+    #
+    #         # For each point, there need to be lines created to neighbors
+    #         elements = []
+    #         for i, point in enumerate(points[:-points_per_slice]):
+    #             # Each element contains the indices of the bounding vertices
+    #             slice_no = int(i / points_per_slice)
+    #             # print(i, slice_no, int(slice_no % 2))
+    #
+    #             if slice_no % 2 == 0.0:
+    #
+    #                 if (i + 1) % points_per_slice != 0.0:
+    #                     elements.append([i, i + 1, i + points_per_slice])
+    #                 else:
+    #                     elements.append(
+    #                         [i, i + points_per_slice, i + 1 - points_per_slice])
+    #
+    #                 if i % points_per_slice != 0.0:
+    #                     elements.append(
+    #                         [i, i + points_per_slice - 1, i + points_per_slice])
+    #                 else:
+    #                     elements.append(
+    #                         [i, i + points_per_slice, i + 2 * points_per_slice - 1])
+    #
+    #             else:
+    #
+    #                 if (i + 1) % points_per_slice != 0.0:
+    #                     # Regular element
+    #                     elements.append([i, i + 1, i + points_per_slice + 1])
+    #                     elements.append([i, i + points_per_slice, i + points_per_slice + 1])
+    #                 else:
+    #                     # Last element of level
+    #                     elements.append([i, i + 1 - points_per_slice, i + 1])
+    #                     elements.append([i, i + 1, i + points_per_slice])
+    #
+    #         # get first slice indices
+    #         # idx = np.where(points[2] == vane_z_data[0])
+    #         # plt.scatter(points[0][idx], points[1][idx], color="blue")
+    #
+    #         # get second slice indices
+    #         # idx = np.where(points[2] == vane_z_data[1])
+    #         # plt.scatter(points[0][idx], points[1][idx], color="red")
+    #         #
+    #         # plt.gca().set_aspect('equal')
+    #
+    #         # from mpl_toolkits.mplot3d import Axes3D
+    #         # fig = plt.figure()
+    #         # ax = fig.add_subplot(111, projection='3d')
+    #         # for element in elements:
+    #         #     triangle = np.append(points[element], points[element[0]])
+    #         #     ax.plot(triangle["x"], triangle["y"], triangle["z"])
+    #         # # for i, point in enumerate(points):
+    #         # #     ax.scatter(point["x"], point["y"], point["z"], marker=r"${}$".format(i), s=49)
+    #         # ax.set_xlabel("x")
+    #         # ax.set_ylabel("y")
+    #         # ax.set_aspect("equal")
+    #         # plt.show()
+    #         #
+    #         # exit()
+    #
+    #         vertices = np.array([points["x"], points["y"], points["z"]])
+    #         elements = np.array(elements).T
+    #
+    #         # Test bem++ calculation for single vane
+    #         try:
+    #
+    #             import bempp.api
+    #
+    #         except ImportError as e:
+    #
+    #             print("Couldn't find module bempp. This only works in Linux environments!")
+    #             print("Error was: {}".format(e))
+    #             exit(1)
+    #
+    #         self._grid = bempp.api.grid.grid_from_element_data(vertices, elements)
+    #
+    #         if self._debug:
+    #
+    #             self._grid.plot()
+    #
+    #     else:
+    #         print("The vane type '{}' is not (yet) implemented. Aborting.".format(self._vane_type))
+    #         return 1
 
     def get_grid(self):
         return self._grid
