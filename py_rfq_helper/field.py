@@ -1,4 +1,6 @@
 from warp import *
+# import numpy as np
+# import time
 from .py_rfq_designer import *
 
 # FILENAME = "vecc_rfq_003_py.dat"
@@ -59,7 +61,6 @@ class FieldLoader(object):
         [x, y, z, e_x, e_y, e_z] = getdatafromtextfile(filename, nskip=1, dims=[6, None])
 
         self.parse_field(x, y, z, e_x, e_y, e_z)
-        
 
     def load_field_from_cells_tt(self, voltage, frequency, a_init, xy_limits, filename=None, resolution=0.002, ignore_rms=False):
         # Loads and calculates field from PARMTEQ file using Two Term potential method
@@ -81,7 +82,6 @@ class FieldLoader(object):
         self._fg.set_bempp_mesh_size(resolution)
 
         self._fg.load_parameters_from_file(filename=loadpath)
-
 
     def generate_field_from_cells_tt(self):
         self._fg.set_calculate_vane_profile(True)
@@ -106,7 +106,6 @@ class FieldLoader(object):
             print("Something went wrong. Please check your file.")
             exit(1)
 
-
         myrfq.append_cell(cell_type="TCS",
                           aperture=0.007147,
                           modulation=1.6778,
@@ -116,7 +115,6 @@ class FieldLoader(object):
                           aperture=0.0095691183,
                           modulation=1.0,
                           length=0.1)
-
 
     def generate_field_from_cells_bempp(self, cyl_id, grid_res, pot_shift, add_endplates=True):
         # myrfq.set_bempp_parameter("add_endplates", True)
@@ -153,7 +151,6 @@ class FieldLoader(object):
                                   domain_decomp=(1, 1, 50),
                                   overlap=0)
         print("Potential took {}".format(time.strftime('%H:%M:%S', time.gmtime(int(time.time() - ts)))))
-
 
     def parse_field(self, x, y, z, e_x, e_y, e_z):
         # Loads and parses the field given arrays with x, y, z positions and 

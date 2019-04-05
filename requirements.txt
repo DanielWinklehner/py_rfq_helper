@@ -1,0 +1,4 @@
+scipy
+numpy
+warp
+mpi4py

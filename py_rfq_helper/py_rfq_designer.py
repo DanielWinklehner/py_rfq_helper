@@ -1,25 +1,11 @@
 # py_rfq_designer.py
 # Contains the FieldGenerator, PyRFQCell, PyRFQVane and PyRFQ classes.
-
-import numpy as np
-import scipy.constants as const
 from multiprocessing import Pool
-from scipy.interpolate import interp1d
-# from scipy import meshgrid
 from scipy.special import iv as bessel1
 from scipy.optimize import root
-# import pickle
-# import scipy.constants as const
-# import numpy as np
-# import platform
-# import matplotlib.pyplot as plt
-# import gc
 import datetime
-import time
-from warp import * 
-import platform
-import gc
-import time
+# noinspection PyUnresolvedReferences
+from warp import *
 from scipy import meshgrid
 from dans_pymodules import *
 from .field import FieldLoader
@@ -31,7 +17,6 @@ if "DISPLAY" in os.environ.keys():
     x11disp = True
 else:
     x11disp = False
-
 
 try:
     import bempp.api

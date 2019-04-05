@@ -11,8 +11,9 @@
 #        The values "zstart" (start of the rfq), "sim_start" (start of the
 #        simulation, and "sim_end_buffer" (extra room beyond the rfq) can be set
 #        if necessary, and are otherwise instantiated at 0.0.
-#       
+#
 
+# noinspection PyUnresolvedReferences
 from warp import *
 from .field import *
 
@@ -75,8 +76,6 @@ class RFQ(object):
                 self._field.generate_field_from_cells_tt()
             elif (self._boundarymethod):
                 print("placeholder!")
-
-        
 
         self._sim_end = self._field._zmax + self.sim_end_buffer
 
