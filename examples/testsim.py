@@ -81,7 +81,6 @@ FILENAME  = "input/fieldw015width.dat"
 
 VANE_RAD  = 1 * cm
 VANE_DIST = 2.5 * cm
-# VANE_DIST = 2.5 * cm
 
 NX     = 16
 NY     = 16
