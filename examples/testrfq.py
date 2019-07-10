@@ -5,13 +5,14 @@ from py_rfq_helper.py_rfq_utils import *
 import bisect
 import time
 import pprint
-from dans_pymodules import IonSpecies, ParticleDistribution, FileDialog
+from dans_pymodules import IonSpecies, ParticleDistribution, FileDialog, MyColors
 import numpy as np
 import scipy.constants as const
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtGui, QtCore
 from PyQt5.QtCore import QThread
 from random import sample
+from my_pzplots import *
 
 def main():
 
@@ -25,7 +26,7 @@ def main():
     # Initialization of basic RFQ parameters
     VANE_RAD   = 1 * cm    # radius of vane cylinder
     VANE_DIST  = 2.5 * cm  # distance of vane center to central axis
-    NX, NY, NZ = 8, 8, 256
+    NX, NY, NZ = 16, 16, 512
     PRWALL     = 0.04
     D_T        = 1e-9
     RF_FREQ    = 32.8e6
@@ -64,7 +65,7 @@ def main():
     solver = MultiGrid3D()    # Non-refined mesh solver
     registersolver(solver)
 
-    top.npinject = 50
+    top.npinject = 100
     top.inject   = 1
     w3d.l_inj_rz = False
     top.zinject  = SIM_START 
@@ -162,36 +163,46 @@ def main():
     # PyQtgraph setup
     app = pg.mkQApp()
 
-    view = pg.PlotWidget()
-    view.show()
-    scatter = pg.ScatterPlotItem(pen=pg.mkPen(width=1, color='g'), symbol='s', size=0.25)
-    scatter_y = pg.ScatterPlotItem(pen=pg.mkPen(width=1, color='r'), symbol='s', size=0.25)
-    view.setRange(xRange=[-0.1,0.75], yRange=[-0.005,0.005])
-    view.addItem(scatter)
-    view.addItem(scatter_y)
+    # rms_x.plot(pen=pg.mkPen(width=1, color='g'), size=1)
 
+    colors = MyColors()
+
+    # utils.rms_plot_setup(title="X and Y RMS (twice rms) vs Z", labels={'left':('X, Y', 'm'), 'bottom':('Z', 'm')})
+    
     @callfromafterstep
     def makeplots():
         if top.it%2 == 0:
+            # utils.plot_rms()
             utils.beamplots()
+            # window()
+            # limits(-0.1, 1, -0.01, 0.01)
+            # pzxedges(color='blue')
+            # pzyedges(color='red')
+            # fma()
+            # refresh() 
 
-    @callfromafterstep
-    def plotpyqt():
-        particle_display_factor = 0.25
-        if top.it%10 == 1:
-            x_by_z_particles = list(zip(beam.getz(),beam.getx()))
-            factored_x_by_z = sample(x_by_z_particles, int(len(x_by_z_particles)*particle_display_factor))
-            scatter.setData(pos=factored_x_by_z)
-            QtGui.QApplication.processEvents()
+
+    # utils.particle_plot_setup(title="X and Y Particles vs Z", labels={'left':('X, Y', 'm'), 'bottom':('Z', 'm')})
+
+    # @callfromafterstep
+    # def plotpyqt():
+    #     if top.it%5 == 1:
+    #         utils.plot_particles(factor=0.2)
+
+    # @callfromafterstep
+    # def output_particles():
+    #     utils.write_particle_data(top.it, 2)
 
 
     starttime = time.time()
-    step(1000)
+    step(2)
     hcp()
     endtime = time.time()  
     print("Elapsed time for simulation: {} seconds".format(endtime-starttime))
+        
+    # sys.exit(app.exec_()) 
 
-    sys.exit(app.exec_()) 
+
 
 
 

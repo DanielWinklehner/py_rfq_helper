@@ -11,32 +11,23 @@ import sys
 
 import numpy as np
 import pyqtgraph as pg
+from pyqtgraph.Qt import QtGui, QtCore
 
-# Generate random points
-n = 1000
-print('Number of points: ' + str(n))
-data = np.random.normal(size=(2, n))
-
-# Create the main application instance
 app = pg.mkQApp()
 
-# Create the view
+
 view = pg.PlotWidget()
-# view.resize(800, 600)
-# view.setWindowTitle('Scatter plot using pyqtgraph with PyQT5')
-# view.setAspectLocked(True)
 view.show()
+# plot_widget.setRange(xRange=[-0.1,0.75], yRange=[-0.005,0.005])
+# rms_x.plot([1, 2, 3], [1, 2, 3], pen=pg.mkPen(width=1, color='g'))
+view = pg.PlotWidget()
+view.show()
+x_top_rms = pg.PlotDataItem(pen=pg.mkPen(width=1, color='g'))
+# x_bottom_rms = pg.PlotDataItem(pen=pg.mkPen(width=1, color='g'))
+view.addItem(x_top_rms)
+# view.addItem(x_bottom_rms)
+x_top_rms.setData([1, 2, 3], [1, 2, 3])
+QtGui.QApplication.processEvents()
 
-# Create the scatter plot and add it to the view
-scatter = pg.ScatterPlotItem(pen=pg.mkPen(width=1, color='g'), symbol='s', size=1)
-view.addItem(scatter)
 
-# Convert data array into a list of dictionaries with the x,y-coordinates
-pos = [{'pos': data[:, i]} for i in range(n)]
-
-now = pg.ptime.time()
-scatter.setData(pos)
-print("Plot time: {} sec".format(pg.ptime.time() - now))
-
-# Gracefully exit the application
-sys.exit(app.exec_())
+sys.exit(app.exec_()) 

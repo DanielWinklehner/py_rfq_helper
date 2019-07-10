@@ -11,11 +11,19 @@ import pickle
 import os
 import matplotlib.pyplot as plt
 import bisect
+from dans_pymodules import MyColors
+import pyqtgraph as pg
+from pyqtgraph.Qt import QtGui, QtCore
+from PyQt5.QtCore import QThread
+import h5py
+from random import sample
+import datetime
 
+colors = MyColors()
 
 class PyRfqUtils(object):
 
-    def __init__(self, rfq, beam):
+    def __init__(self, rfq, beam): 
 
         self._velocity_calculated = False
         self._zclose = rfq._field._zmax
@@ -30,10 +38,24 @@ class PyRfqUtils(object):
         self._rfq = rfq
         self._wavelengthbound = None
 
-
         self._max_steps_find_bunch = None
 
         self._velocity_count = top.npinject * 150
+
+        self._app = pg.mkQApp()
+
+        self._view = None
+        self._x_top_rms = None
+        self._x_bottom_rms = None
+        self._y_top_rms = None
+        self._y_bottom_rms = None       
+
+        self._view_scatter = None
+        self._scatter_x = None
+        self._scatter_y = None
+
+        self._particle_data_file = None
+        self._particle_data_group = None
 
         # winon(1, suffix='YZ')
         # winon(2, suffix="X'X")
@@ -333,3 +355,182 @@ class PyRfqUtils(object):
         }
 
         return boundaries
+
+
+    def my_extractvar(self, name, varsuffix=None, pkg='top', ff=None):
+        """
+        Helper function which, given a name, returns the appropriate data. Note that
+        name could actually be the variable itself, in which case, it is just
+        returned.
+        """
+        if isinstance(name,str):
+            # --- if varsuffix is specified, try to evaluate the name with the
+            # --- suffix. If ok, return the result, otherwise, default to the
+            # --- fortran variable in the specified package.
+            if varsuffix is not None:
+                vname = name + str(varsuffix)
+                try:    result = ff.read(vname)
+                except: result = None
+                if result is not None: return result
+                try:    result = __main__.__dict__[vname]
+                except: result = None
+                if result is not None: return result
+            try:    result = ff.read(name+'@'+pkg)
+            except: result = None
+            if result is not None: return result
+            return getattr(packageobject(pkg),name)
+        else:
+            return name
+
+    def plot_xedges(self, plot_item_top, plot_item_bottom, pen=(200,200,200), symbol=None, symbolPen=(200,200,200), symbolBrush=(50,50,150), fillLevel=None, 
+                    brush=None, js=-1, zoffset=None,zscale=1.,scale=1., titleb=None,titles=1):
+        """Plots beam X edges (centroid +- twice X rms) versus Z
+        - symbol: A string describing the shape of symbols to use for each point. Optionally, this may also be a sequence of strings with a different symbol for each point.
+        - symbolPen: The pen (or sequence of pens) to use when drawing the symbol outline.
+        - symbolBrush: The brush (or sequence of brushes) to use when filling the symbol.
+        - fillLevel: Fills the area under the plot curve to this Y-value.
+        - brush: The brush to use when filling under the curve.
+        - js=-1: species number, zero based. When -1, plots data combined from all
+                 species
+        - zoffset=zbeam: offset added to axis
+        - zscale=1: scale of axis
+          plots versus (zoffset + zmntmesh)/zscale
+        - scale=1.: factor to scale data by
+        - titleb="Z": bottom title
+        - titles=1: specifies whether or not to plot titles"""
+
+
+        varsuffix = None
+        ff = None
+
+        if zscale == 0.: 
+            raise Exception("zscale must be nonzero")
+
+        if titleb is None:
+            if zscale == 1.: titleb = "Z (m)"
+            else: titleb = "Z"
+        xbarz = self.my_extractvar('xbarz',varsuffix,'top',ff)[...,js]*scale
+        xrmsz = self.my_extractvar('xrmsz',varsuffix,'top',ff)[...,js]*scale
+        zmntmesh = self.my_extractvar('zmntmesh',varsuffix,'top',ff)
+        if zoffset is None: zoffset = self.my_extractvar('zbeam',varsuffix,'top',ff)
+
+        # plot_item.plot((zoffset+zmntmesh)/zscale, xbarz+2.*xrmsz, pen=pen, symbol=symbol, symbolPen=symbolPen, symbolBrush=symbolBrush, fillLevel=fillLevel, brush=brush)
+        # plot_item.plot((zoffset+zmntmesh)/zscale, xbarz-2.*xrmsz, pen=pen, symbol=symbol, symbolPen=symbolPen, symbolBrush=symbolBrush, fillLevel=fillLevel, brush=brush)
+
+        plot_item_top.setData((zoffset+zmntmesh)/zscale, xbarz+2.*xrmsz)
+        plot_item_bottom.setData((zoffset+zmntmesh)/zscale, xbarz-2.*xrmsz)
+
+        def gettitler(js):
+            if js == -1: return "All species"
+            else:        return "Species %d"%js
+
+        # if titles:
+        #     # ptitles("Beam X edges (xbar+-2*rms)",titleb,"(m)",
+        #             # gettitler(js))
+
+    #   pzxedges: Plots beam X edges (centroid +- twice Xrms) versus Z
+    def plot_yedges(self, plot_item_top, plot_item_bottom, pen=(200,200,200), symbol=None, symbolPen=(200,200,200), symbolBrush=(50,50,150), fillLevel=None, 
+                    brush=None, js=-1, zoffset=None,zscale=1.,scale=1., titleb=None,titles=1):
+        """Plots beam X edges (centroid +- twice X rms) versus Z
+        - symbol: A string describing the shape of symbols to use for each point. Optionally, this may also be a sequence of strings with a different symbol for each point.
+        - symbolPen: The pen (or sequence of pens) to use when drawing the symbol outline.
+        - symbolBrush: The brush (or sequence of brushes) to use when filling the symbol.
+        - fillLevel: Fills the area under the plot curve to this Y-value.
+        - brush: The brush to use when filling under the curve.
+        - js=-1: species number, zero based. When -1, plots data combined from all
+                 species
+        - zoffset=zbeam: offset added to axis
+        - zscale=1: scale of axis
+          plots versus (zoffset + zmntmesh)/zscale
+        - scale=1.: factor to scale data by
+        - titleb="Z": bottom title
+        - titles=1: specifies whether or not to plot titles"""
+
+
+        varsuffix = None
+        ff = None
+
+        if zscale == 0.:
+            raise Exception("zscale must be nonzero")
+        if titleb is None:
+            if zscale == 1.: titleb = "Z (m)"
+            else: titleb = "Z"
+        ybarz = self.my_extractvar('ybarz',varsuffix,'top',ff)[...,js]*scale
+        yrmsz = self.my_extractvar('yrmsz',varsuffix,'top',ff)[...,js]*scale
+        zmntmesh = self.my_extractvar('zmntmesh',varsuffix,'top',ff)
+        if zoffset is None: zoffset = self.my_extractvar('zbeam',varsuffix,'top',ff)
+
+        plot_item_top.setData((zoffset+zmntmesh)/zscale, ybarz+2.*yrmsz)
+        plot_item_bottom.setData((zoffset+zmntmesh)/zscale, ybarz-2.*yrmsz)
+
+        def gettitler(js):
+            if js == -1: return "All species"
+            else:        return "Species %d"%js
+
+        # if titles:
+        #     ptitles("Beam Y edges (ybar+-2*rms)",titleb,"(m)",
+        #             gettitler(js))
+
+    def rms_plot_setup(self, xpen=pg.mkPen(width=1.5, color=colors[6]), ypen=pg.mkPen(width=1.5,color=colors[5]),
+                        xrange=[-0.1,1], yrange=[-0.01,0.01], title=None, labels=None):
+        self._view = pg.PlotWidget(title=title, labels=labels)
+        self._x_top_rms = pg.PlotDataItem(pen=xpen)
+        self._x_bottom_rms = pg.PlotDataItem(pen=xpen)
+        self._y_top_rms = pg.PlotDataItem(pen=ypen)
+        self._y_bottom_rms = pg.PlotDataItem(pen=ypen)       
+        self._view.setRange(xRange=xrange, yRange=yrange)
+        self._view.addItem(self._x_top_rms)
+        self._view.addItem(self._x_bottom_rms)
+        self._view.addItem(self._y_top_rms)
+        self._view.addItem(self._y_bottom_rms)
+
+
+    def plot_rms(self):
+        #   pzxedges: Plots beam X and Y edges (centroid +- twice Xrms) versus Z
+        self._view.show()
+        self.plot_xedges(self._x_top_rms, self._x_bottom_rms)
+        self.plot_yedges(self._y_top_rms, self._y_bottom_rms)
+
+        QtGui.QApplication.processEvents()
+
+
+    def particle_plot_setup(self, xpen=pg.mkPen(width=1, color=colors[6]), ypen=pg.mkPen(width=1, color=colors[5]),
+                            symbol='s', size=0.25, xrange=[-0.1,1], yrange=[-0.01,0.01], title=None, labels=None):
+        self._view_scatter = pg.PlotWidget(title=title, labels=labels)
+        self._view_scatter.show()
+        self._scatter_x = pg.ScatterPlotItem(pen=xpen, symbol=symbol, size=size)
+        self._scatter_y = pg.ScatterPlotItem(pen=ypen, symbol=symbol, size=size)
+        self._view_scatter.setRange(xRange=xrange, yRange=yrange)
+        self._view_scatter.addItem(self._scatter_x)
+        self._view_scatter.addItem(self._scatter_y)
+
+    def plot_particles(self, factor=1):
+        x_by_z_particles = list(zip(self._beam.getz(),self._beam.getx()))
+        factored_x_by_z = sample(x_by_z_particles, int(len(x_by_z_particles)*factor))
+        self._scatter_x.setData(pos=factored_x_by_z)
+        y_by_z_particles = list(zip(self._beam.getz(),self._beam.gety()))
+        factored_y_by_z = sample(y_by_z_particles, int(len(y_by_z_particles)*factor))
+        self._scatter_y.setData(pos=factored_y_by_z)
+        QtGui.QApplication.processEvents()
+
+    def get_rms_widget(self):
+        return self._view
+
+    def get_particle_widget(self):
+        return self._view_scatter
+
+    def write_particle_data(self, step_num, rate=5):
+      
+        if top.it == 1:
+            date = datetime.datetime.today()
+            filename = date.strftime('%Y-%m-%dT%H:%M') + "_particle_data.hdf5"
+            self._particle_data_file = h5py.File(filename, 'w')
+            self._particle_data_group = self._particle_data_file.create_group("particle_data")
+        
+        elif top.it%rate != 0:
+            return
+
+        particles = list(zip(self._beam.getx(),self._beam.gety(), self._beam.getz()))
+        grp = self._particle_data_group.create_dataset(str(step_num), np.shape(particles), data=particles, dtype=np.double)
+
+
