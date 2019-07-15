@@ -186,8 +186,10 @@ class RFQ(object):
         rod2 = ZCylinder(self.vane_radius, length, zcent=zcent, xcent=-self.vane_distance) 
         rod3 = ZCylinder(self.vane_radius, length, zcent=zcent, ycent=self.vane_distance)
         rod4 = ZCylinder(self.vane_radius, length, zcent=zcent, ycent=-self.vane_distance)
+
+
         total_conductors = outer_shell + rod1 + rod2 + rod3 + rod4
-        
+       
         installconductor(total_conductors)
         scraper = ParticleScraper(total_conductors)
 

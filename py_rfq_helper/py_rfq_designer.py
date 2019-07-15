@@ -3666,7 +3666,9 @@ class PyRFQ(object):
             rod2 = ZCylinder(self.vane_radius, length, zcent=zcent, xcent=-self.vane_distance) 
             rod3 = ZCylinder(self.vane_radius, length, zcent=zcent, ycent=self.vane_distance)
             rod4 = ZCylinder(self.vane_radius, length, zcent=zcent, ycent=-self.vane_distance)
+
             total_conductors += rod1 + rod2 + rod3 + rod4
+
         if (self.endplates):
             firstendplate = ZCylinderOut(self.endplates_inner_diameter, self.endplates_thickness, zcent=self._field._zmin-self.endplates_distance_from_vanes)
             endendplate = ZCylinderOut(self.endplates_inner_diameter, self.endplates_thickness, zcent=self._field._zmax+self.endplates_distance_from_vanes)

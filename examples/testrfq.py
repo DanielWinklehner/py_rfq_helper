@@ -14,9 +14,77 @@ from PyQt5.QtCore import QThread
 from random import sample
 from my_pzplots import *
 
-def main():
+colors = MyColors()
 
-    # FILENAME  = "input/vecc_rfq_004_py.dat"
+def load_from_ibsimu(filename):
+    # Some constants
+    clight = const.value("speed of light in vacuum")  # (m/s)
+    amu_kg = const.value("atomic mass constant")  # (kg)
+    amu_mev = const.value("atomic mass constant energy equivalent in MeV")  # MeV
+    echarge = const.value("elementary charge")
+
+    # IBSimu particle file: I, M (kg), t, x (m), vx (m/s), y (m), vy (m/s), z (m), vz (m/s)
+    with open(filename) as infile:
+        lines = infile.readlines()
+
+    npart = len(lines)
+
+    current = np.empty(npart)
+    mass = np.empty(npart)
+    x = np.empty(npart)
+    y = np.empty(npart)
+    z = np.empty(npart)
+    vx = np.empty(npart)
+    vy = np.empty(npart)
+    vz = np.empty(npart)
+
+    for i, line in enumerate(lines):
+        current[i], mass[i], _, x[i], vx[i], y[i], vy[i], z[i], vz[i] = [float(item) for item in line.strip().split()]
+
+    masses = np.sort(np.unique(mass))  # mass in MeV, sorted in ascending order (protons before h2+)
+
+    particle_distributions = []
+
+    for i, m in enumerate(masses):
+
+        m_mev = m / amu_kg * amu_mev
+
+        species_indices = np.where((mass == m) & (vz > 5.0e5))
+
+        ion = IonSpecies("Species {}".format(i + 1),
+                         mass_mev=m_mev,
+                         a=m_mev / amu_mev,
+                         z=np.round(m_mev / amu_mev, 0),
+                         q=1.0,
+                         current=np.sum(current[species_indices]),
+                         energy_mev=1)  # Note: Set energy to 1 for now, will be recalculated when calling emittance
+
+        particle_distributions.append(
+            ParticleDistribution(ion=ion,
+                                 x=x[species_indices],
+                                 y=y[species_indices],
+                                 z=z[species_indices],
+                                 vx=vx[species_indices],
+                                 vy=vy[species_indices],
+                                 vz=vz[species_indices]
+                                 ))
+
+        # plt.scatter(x[species_indices], y[species_indices], s=0.5)
+        # plt.show()
+        # plt.scatter(x[species_indices], vx[species_indices]/vz[species_indices], s=0.5)
+        # plt.show()
+
+        particle_distributions[-1].calculate_emittances()
+
+
+    return particle_distributions, current, mass, x, vx, y, vy, z, vz
+
+
+
+
+
+def main():
+    # FIELD_FILENAME  = "input/vecc_rfq_004_py.dat"
     # FILENAME  = "input/PARMTEQOUT.TXT"
     # FILENAME  = "input/Parm_50_63cells.dat"
     # FILENAME  = "input/fieldoutput.txt"
@@ -30,10 +98,13 @@ def main():
     PRWALL     = 0.04
     D_T        = 1e-9
     RF_FREQ    = 32.8e6
-    Z_START    = 0.0  #the start of the rfq
-    SIM_START  = -0.1
+    # Z_START    = 0.0  #the start of the rfq
+    # SIM_START  = -0.1
 
-    # setup() # Warp setup function
+    Z_START = 0.4
+    SIM_START = 0.3
+
+    setup() # Warp setup function
 
     ## Warp parameter specifications for simulation
     w3d.solvergeom = w3d.XYZgeom
@@ -65,7 +136,7 @@ def main():
     solver = MultiGrid3D()    # Non-refined mesh solver
     registersolver(solver)
 
-    top.npinject = 100
+    top.npinject = 0
     top.inject   = 1
     w3d.l_inj_rz = False
     top.zinject  = SIM_START 
@@ -104,22 +175,77 @@ def main():
 
     # pp = Species(type=Proton, charge_state=pd[0].ion.z(), name=pd[0].ion.name())
     # beam = Species(type=Dihydrogen, charge_state=pd[1].ion.z(), name=pd[1].ion.name())
-    beam = Species(type=Dihydrogen, charge_state=+1, name="H2+")
-    beam.ekin  = 15.*kV      # ion kinetic energy [eV] [eV]
-    beam.ibeam = 10 * mA  # compensated beam current [A]
-    beam.emitx = 1e-6  # beam x-emittance, rms edge [m-rad]
-    beam.emity = 1e-6  # beam y-emittance, rms edge [m-rad]
-    beam.vthz  = 0.0  # axial velocity spread [m/s ec]
+    # beam = Species(type=Dihydrogen, charge_state=+1, name="H2+", color=red)
+    # beam.ekin  = 15.*kV      # ion kinetic energy [eV] [eV]
+    # beam.ibeam = 10 * mA  # compensated beam current [A]
+    # beam.emitx = 1e-6  # beam x-emittance, rms edge [m-rad]
+    # beam.emity = 1e-6  # beam y-emittance, rms edge [m-rad]
+    # beam.vthz  = 0.0  # axial velocity spread [m/s ec]
+
+
+    particle_dist, current, mass, x, vx, y, vy, z, vz= load_from_ibsimu('./input/particle_out_461mm_n5kv_10ma_20KV.txt')
+    h2_beam = Species(type=Dihydrogen, charge_state=+1, name="H2+")
+    proton_beam = Species(type=Proton, charge_state=+1, name="P", color=red)
+    # print("LEN X: ", len(x))
+    # add_particles(x=x, y=y, z=z, vx=vx, vy=vy, vz=vz, lallindomain=True)
+    top.ainject = 0.05
+    top.binject = 0.05 
+    # beam.ekin  = 15.*kV      # ion kinetic energy [eV] [eV]
+    # beam.ibeam = 10 * mA  # compensated beam current [A]
+    # beam.emitx = 1e-6  # beam x-emittance, rms edge [m-rad]
+    # beam.emity = 1e-6  # beam y-emittance, rms edge [m-rad]
+    # beam.vthz  = 0.0  # axial velocity spread [m/s ec]
+
+    
+    
+    
+
+    def createmybeam():
+        idx = np.random.choice(np.arange(len(x)), 1000, replace=False)
+        mass_inject = mass[idx]
+        x_inject = x[idx]
+        y_inject = y[idx]
+        z_inject = z[idx]
+        vx_inject = vx[idx]
+        vy_inject = vy[idx]
+        vz_inject = vz[idx]
+
+        h2_indices = np.where(mass_inject > 1.7e-27)[0]
+        h2_beam.addparticles(x=x_inject[h2_indices],
+                             y=y_inject[h2_indices],
+                             z=z_inject[h2_indices],
+                             vx=vx_inject[h2_indices],
+                             vy=vy_injec[h2_indicest],
+                             vz=vz_inject[h2_indices])
+
+        proton_indices = np.where(mass_inject < 1.7e-27)[0]
+        proton_beam.addparticles(x=x_inject[proton_indices],
+                             y=y_inject[proton_indices],
+                             z=z_inject[proton_indices],
+                             vx=vx_inject[proton_indices],
+                             vy=vy_injec[proton_indicest],
+                             vz=vz_inject[proton_indices])
+    
+    installuserinjection(createmybeam)
 
     # Beam centroid and envelope initial conditions
-    beam.x0  = 0.0  # initial x-centroid xc = <x> [m]
-    beam.y0  = 0.0  # initial y-centroid yc = <y> [m]
-    beam.xp0 = 0.0  # initial x-centroid angle xc' = <x'> = d<x>/ds [rad]
-    beam.yp0 = 0.0  # initial y-centroid angle yc' = <y'> = d<y>/ds [rad]
-    beam.a0  = 5 * mm  # initial x-envelope edge a = 2*sqrt(<(x-xc)^2>) [m]
-    beam.b0  = 5 * mm  # initial y-envelope edge b = 2*sqrt(<(y-yc)^2>) [m]
-    beam.ap0 = -0.03 # initial x-envelope angle ap = a' = d a/ds [rad]
-    beam.bp0 = -0.03 # initial y-envelope angle bp = b' = d b/ds [rad]
+    h2_beam.x0  = 0.0  # initial x-centroid xc = <x> [m]
+    h2_beam.y0  = 0.0  # initial y-centroid yc = <y> [m]
+    h2_beam.xp0 = 0.0  # initial x-centroid angle xc' = <x'> = d<x>/ds [rad]
+    h2_beam.yp0 = 0.0  # initial y-centroid angle yc' = <y'> = d<y>/ds [rad]
+    h2_beam.a0  = 5 * mm  # initial x-envelope edge a = 2*sqrt(<(x-xc)^2>) [m]
+    h2_beam.b0  = 5 * mm  # initial y-envelope edge b = 2*sqrt(<(y-yc)^2>) [m]
+    h2_beam.ap0 = -0.03 # initial x-envelope angle ap = a' = d a/ds [rad]
+    h2_beam.bp0 = -0.03 # initial y-envelope angle bp = b' = d b/ds [rad]
+
+    proton_beam.x0  = 0.0  # initial x-centroid xc = <x> [m]
+    proton_beam.y0  = 0.0  # initial y-centroid yc = <y> [m]
+    proton_beam.xp0 = 0.0  # initial x-centroid angle xc' = <x'> = d<x>/ds [rad]
+    proton_beam.yp0 = 0.0  # initial y-centroid angle yc' = <y'> = d<y>/ds [rad]
+    proton_beam.a0  = 5 * mm  # initial x-envelope edge a = 2*sqrt(<(x-xc)^2>) [m]
+    proton_beam.b0  = 5 * mm  # initial y-envelope edge b = 2*sqrt(<(y-yc)^2>) [m]
+    proton_beam.ap0 = -0.03 # initial x-envelope angle ap = a' = d a/ds [rad]
+    proton_beam.bp0 = -0.03 # initial y-envelope angle bp = b' = d b/ds [rad]
 
 
     top.lrelativ = False
@@ -165,9 +291,9 @@ def main():
 
     # rms_x.plot(pen=pg.mkPen(width=1, color='g'), size=1)
 
-    colors = MyColors()
+    # colors = MyColors()
 
-    # utils.rms_plot_setup(title="X and Y RMS (twice rms) vs Z", labels={'left':('X, Y', 'm'), 'bottom':('Z', 'm')})
+    utils.rms_plot_setup(title="X and Y RMS (twice rms) vs Z", labels={'left':('X, Y', 'm'), 'bottom':('Z', 'm')})
     
     @callfromafterstep
     def makeplots():
@@ -195,7 +321,7 @@ def main():
 
 
     starttime = time.time()
-    step(2)
+    step(1500)
     hcp()
     endtime = time.time()  
     print("Elapsed time for simulation: {} seconds".format(endtime-starttime))

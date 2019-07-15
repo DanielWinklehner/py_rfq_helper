@@ -34,7 +34,8 @@ class PyRfqUtils(object):
         self._wavelength = 0.0
         self._bunch_particles = {}
         self._bunchfound = False
-        self._beam = beam
+        self._beam = []
+        self._beam += beam
         self._rfq = rfq
         self._wavelengthbound = None
 
