@@ -77,7 +77,7 @@ def load_from_ibsimu(filename):
         particle_distributions[-1].calculate_emittances()
 
 
-    return particle_distributions, current, mass, x, vx, y, vy, z, vz
+    return current, mass, x, vx, y, vy, z, vz
 
 
 
@@ -88,21 +88,19 @@ def main():
     # FILENAME  = "input/PARMTEQOUT.TXT"
     # FILENAME  = "input/Parm_50_63cells.dat"
     # FILENAME  = "input/fieldoutput.txt"
-    FIELD_FILENAME  = "input/fieldw015width.dat"
+    # FIELD_FILENAME  = "input/fieldw015width.dat"
+    FIELD_FILENAME = 'input/2019_07_23_PyRFQ_Test_Field_Voltage_25kV_W_In15keV_W_Out_60keV.txt'
 
 
     # Initialization of basic RFQ parameters
     VANE_RAD   = 1 * cm    # radius of vane cylinder
     VANE_DIST  = 2.5 * cm  # distance of vane center to central axis
-    NX, NY, NZ = 16, 16, 512
+    NX, NY, NZ = 64, 64, 1024
     PRWALL     = 0.04
-    D_T        = 1e-9
+    D_T        = 1e-10
     RF_FREQ    = 32.8e6
-    # Z_START    = 0.0  #the start of the rfq
-    # SIM_START  = -0.1
-
-    Z_START = 0.4
-    SIM_START = 0.3
+    Z_START    = 0.01  #the start of the rfq
+    SIM_START  = -0.014
 
     setup() # Warp setup function
 
@@ -136,7 +134,7 @@ def main():
     solver = MultiGrid3D()    # Non-refined mesh solver
     registersolver(solver)
 
-    top.npinject = 0
+    top.npinject = 50
     top.inject   = 1
     w3d.l_inj_rz = False
     top.zinject  = SIM_START 
@@ -157,7 +155,7 @@ def main():
     rfq.endplates      = False
 
     rfq.xy_limits = [-0.03, 0.03, -0.03, 0.03]
-    rfq.z_limits  = [0, 1.4]
+    rfq.z_limits  = [0, 1.5]
     rfq._voltage  = 22e3
     rfq.tt_a_init = 0.038802
 
@@ -171,25 +169,84 @@ def main():
     rfq.setup()
     rfq.install()
 
+    twiss_emitx = 1.8e-6 /6
+    twiss_emity = 1.8e-6 /6
+    twiss_alphax = 1.9896856 #dimensionless
+    twiss_alphay = 1.9896856
+    twiss_alphaz = 0
+    twiss_betax = 13.241259 *cm / mm # cm/mrad
+    twiss_betay = 13.241259 *cm / mm
+    twiss_betaz = 45
+    twiss_gammax = (1 + twiss_alphax**2) / twiss_betax
+    twiss_gammay = (1 + twiss_alphay**2) / twiss_betay
 
+    # print("xalpha: {}  xbeta: {}  xgamma: {}".format(twiss_alphax, twiss_betax, twiss_gammax))
+
+    beamxangle = -sqrt(twiss_emitx * twiss_gammax)
+    beamx = sqrt(twiss_emitx * twiss_betax)
+    beamyangle = -sqrt(twiss_emity * twiss_gammay)
+    beamy = sqrt(twiss_emity * twiss_betay)
+
+    print("beamxangle: {} ".format(beamxangle))
 
     # pp = Species(type=Proton, charge_state=pd[0].ion.z(), name=pd[0].ion.name())
+
+
+
+
+
     # beam = Species(type=Dihydrogen, charge_state=pd[1].ion.z(), name=pd[1].ion.name())
     # beam = Species(type=Dihydrogen, charge_state=+1, name="H2+", color=red)
+
     # beam.ekin  = 15.*kV      # ion kinetic energy [eV] [eV]
     # beam.ibeam = 10 * mA  # compensated beam current [A]
-    # beam.emitx = 1e-6  # beam x-emittance, rms edge [m-rad]
-    # beam.emity = 1e-6  # beam y-emittance, rms edge [m-rad]
+    # beam.emitx = 1.8e-6  # beam x-emittance, rms edge [m-rad]
+    # beam.emity = 1.8e-6  # beam y-emittance, rms edge [m-rad]
     # beam.vthz  = 0.0  # axial velocity spread [m/s ec]
+    
+    # # Beam centroid and envelope initial conditions
+    # beam.x0  = 0.0  # initial x-centroid xc = <x> [m]
+    # beam.y0  = 0.0  # initial y-centroid yc = <y> [m]
+    # beam.xp0 = 0.0  # initial x-centroid angle xc' = <x'> = d<x>/ds [rad]
+    # beam.yp0 = 0.0  # initial y-centroid angle yc' = <y'> = d<y>/ds [rad]
+    # beam.a0  = beamx
+    # beam.b0  = beamy
+    # beam.ap0 = beamxangle
+    # beam.bp0 = beamyangle
 
 
-    particle_dist, current, mass, x, vx, y, vy, z, vz= load_from_ibsimu('./input/particle_out_461mm_n5kv_10ma_20KV.txt')
-    h2_beam = Species(type=Dihydrogen, charge_state=+1, name="H2+")
+
+
+
+    # beam.a0  = 5 * mm  # initial x-envelope edge a = 2*sqrt(<(x-xc)^2>) [m]
+    # beam.b0  = 5 * mm  # initial y-envelope edge b = 2*sqrt(<(y-yc)^2>) [m]
+    # beam.ap0 = -0.06 # initial x-envelope angle ap = a' = d a/ds [rad]
+    # beam.bp0 = -0.06  # initial y-envelope angle bp = b' = d b/ds [rad]
+
+    ##################################### PARTICLE DISTRIBUTION
+    current, mass, x, vx, y, vy, z, vz = load_from_ibsimu('./input/particle_out_461mm_n5kv_10ma_20KV.txt')
+    all_particles = np.array(list(zip(current, mass, x, vx, y, vy, z, vz)))
+
+    h2_list = all_particles[np.where(mass > mass.min())]
+    proton_list = all_particles[np.where(mass == mass.min())]
+
+    h2_num = len(h2_list)
+    proton_num = len(proton_list)
+
+    h2_current = sum([i for i, _, _, _, _, _, _, _ in h2_list])
+    proton_current = sum([i for i, _, _, _, _, _, _, _ in proton_list])
+
+    h2_beam = Species(type=Dihydrogen, charge_state=+1, name="H2+", color=blue)
     proton_beam = Species(type=Proton, charge_state=+1, name="P", color=red)
-    # print("LEN X: ", len(x))
-    # add_particles(x=x, y=y, z=z, vx=vx, vy=vy, vz=vz, lallindomain=True)
+
     top.ainject = 0.05
     top.binject = 0.05 
+    h2_beam.ibeam = h2_current
+    proton_beam.ibeam = proton_current
+    h2_beam.ekin = 15.*kV
+    proton_beam.ekin = 15.*kV
+
+
     # beam.ekin  = 15.*kV      # ion kinetic energy [eV] [eV]
     # beam.ibeam = 10 * mA  # compensated beam current [A]
     # beam.emitx = 1e-6  # beam x-emittance, rms edge [m-rad]
@@ -198,35 +255,80 @@ def main():
 
     
     
-    
+    w3d.l_inj_user_particles_v = true
+    w3d.l_inj_user_particles_z = true
+    top.linj_enormcl = false
+    top.linj_efromgrid = true
+
+    h2_beam_id = 0
+    proton_beam_id = 1
+
+
+    total_parts_per_step = 1000
+    h2_per_step = int(total_parts_per_step * (h2_num / (h2_num + proton_num)))
+    prot_per_step = int(total_parts_per_step * (proton_num / (h2_num + proton_num)))
+
+    def injectionsource():
+        if (w3d.inj_js == h2_beam_id):
+            nump = h2_per_step
+            w3d.npgrp = nump
+            gchange('Setpwork3d')
+            
+            idx = np.random.choice(np.arange(len(h2_list)), h2_per_step, replace=False)
+            h2_inject = h2_list[idx]
+            _, _, h2_x, h2_vx, h2_y, h2_vy, h2_z, h2_vz = list(zip(*h2_inject))
+            w3d.xt[:] = h2_x
+            w3d.yt[:] = h2_y
+            # w3d.zt[:] = np.full((len(h2_x)), 0)
+            w3d.uxt[:] = h2_vx
+            w3d.uyt[:] = h2_vy
+            w3d.uzt[:] = h2_vz
+
+        elif (w3d.inj_js == proton_beam_id):
+            nump = prot_per_step
+            w3d.npgrp = nump
+            gchange('Setpwork3d')
+
+            idx = np.random.choice(np.arange(len(proton_list)), prot_per_step, replace=False)
+            proton_inject = proton_list[idx]
+            _, _, p_x, p_vx, p_y, p_vy, p_z, p_vz = list(zip(*proton_inject))
+            w3d.xt[:] = p_x
+            w3d.yt[:] = p_y
+            # w3d.zt[:] = np.full((len(p_x)), 0)
+            w3d.uxt[:] = p_vx
+            w3d.uyt[:] = p_vy
+            w3d.uzt[:] = p_vz
+
+    installuserparticlesinjection(injectionsource)
 
     def createmybeam():
-        idx = np.random.choice(np.arange(len(x)), 1000, replace=False)
-        mass_inject = mass[idx]
-        x_inject = x[idx]
-        y_inject = y[idx]
-        z_inject = z[idx]
-        vx_inject = vx[idx]
-        vy_inject = vy[idx]
-        vz_inject = vz[idx]
+        total_part_num = 1000
+        h2_part_num = int(total_part_num * (h2_num / (h2_num + proton_num)))
+        proton_part_num = int(total_part_num * (proton_num / (h2_num + proton_num)))
 
-        h2_indices = np.where(mass_inject > 1.7e-27)[0]
-        h2_beam.addparticles(x=x_inject[h2_indices],
-                             y=y_inject[h2_indices],
-                             z=z_inject[h2_indices],
-                             vx=vx_inject[h2_indices],
-                             vy=vy_injec[h2_indicest],
-                             vz=vz_inject[h2_indices])
+        idx = np.random.choice(np.arange(len(h2_list)), h2_part_num, replace=False)
+        h2_inject = h2_list[idx]
+        h2_curr, h2_mass, h2_x, h2_vx, h2_y, h2_vy, h2_z, h2_vz = list(zip(*h2_inject))
 
-        proton_indices = np.where(mass_inject < 1.7e-27)[0]
-        proton_beam.addparticles(x=x_inject[proton_indices],
-                             y=y_inject[proton_indices],
-                             z=z_inject[proton_indices],
-                             vx=vx_inject[proton_indices],
-                             vy=vy_injec[proton_indicest],
-                             vz=vz_inject[proton_indices])
+        h2_beam.addparticles(x=h2_x,
+                             y=h2_y,
+                             z=h2_z,
+                             vx=h2_vx,
+                             vy=h2_vy,
+                             vz=h2_vz)
+
+        idx = np.random.choice(np.arange(len(proton_list)), proton_part_num, replace=False)
+        proton_inject = proton_list[idx]
+        p_curr, p_mass, p_x, p_vx, p_y, p_vy, p_z, p_vz = list(zip(*proton_inject))
+
+        proton_beam.addparticles(x=p_x,
+                                 y=p_y,
+                                 z=p_z,
+                                 vx=p_vx,
+                                 vy=p_vy,
+                                 vz=p_vz)
     
-    installuserinjection(createmybeam)
+    # installuserinjection(createmybeam)
 
     # Beam centroid and envelope initial conditions
     h2_beam.x0  = 0.0  # initial x-centroid xc = <x> [m]
@@ -237,6 +339,7 @@ def main():
     h2_beam.b0  = 5 * mm  # initial y-envelope edge b = 2*sqrt(<(y-yc)^2>) [m]
     h2_beam.ap0 = -0.03 # initial x-envelope angle ap = a' = d a/ds [rad]
     h2_beam.bp0 = -0.03 # initial y-envelope angle bp = b' = d b/ds [rad]
+    h2_beam.ekin = 15 * kV
 
     proton_beam.x0  = 0.0  # initial x-centroid xc = <x> [m]
     proton_beam.y0  = 0.0  # initial y-centroid yc = <y> [m]
@@ -246,6 +349,8 @@ def main():
     proton_beam.b0  = 5 * mm  # initial y-envelope edge b = 2*sqrt(<(y-yc)^2>) [m]
     proton_beam.ap0 = -0.03 # initial x-envelope angle ap = a' = d a/ds [rad]
     proton_beam.bp0 = -0.03 # initial y-envelope angle bp = b' = d b/ds [rad]
+    proton_beam.ekin = 15 * kV
+    ############################################################################
 
 
     top.lrelativ = False
@@ -253,7 +358,8 @@ def main():
     top.pgroup.nps = 0
 
 
-    utils = PyRfqUtils(rfq, beam)
+    # utils = PyRfqUtils(rfq, [h2_beam, proton_beam])
+    utils = PyRfqUtils(rfq, [h2_beam, proton_beam])
 
     # boundaries = utils.find_vane_mesh_boundaries(NX, SIM_START, w3d.zmmax, -PRWALL, PRWALL, VANE_DIST, VANE_RAD)
 
@@ -297,9 +403,10 @@ def main():
     
     @callfromafterstep
     def makeplots():
-        if top.it%2 == 0:
+        if top.it%10 == 0:
             # utils.plot_rms()
             utils.beamplots()
+            # print(h2_beam.getux())
             # window()
             # limits(-0.1, 1, -0.01, 0.01)
             # pzxedges(color='blue')
@@ -315,17 +422,20 @@ def main():
     #     if top.it%5 == 1:
     #         utils.plot_particles(factor=0.2)
 
-    # @callfromafterstep
-    # def output_particles():
-    #     utils.write_particle_data(top.it, 2)
+    @callfromafterstep
+    def output_particles():
+        if top.it%10 == 0:
+            utils.write_hdf5_data(top.it, [h2_beam])
 
 
     starttime = time.time()
-    step(1500)
+    step(20000)
     hcp()
     endtime = time.time()  
     print("Elapsed time for simulation: {} seconds".format(endtime-starttime))
         
+    bunch = utils.find_bunch(h2_beam, max_steps=10000)
+
     # sys.exit(app.exec_()) 
 
 

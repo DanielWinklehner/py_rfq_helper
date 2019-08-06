@@ -105,7 +105,6 @@ w3d.ymmax =  PRWALL
 w3d.ymmin = -PRWALL
 w3d.ny    =  NY
 
-
 w3d.zmmax =  1.456 + 0.5
 w3d.zmmin =  SIM_START
 w3d.nz    =  NZ

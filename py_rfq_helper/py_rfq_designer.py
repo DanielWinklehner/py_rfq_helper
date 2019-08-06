@@ -3633,7 +3633,7 @@ class PyRFQ(object):
         def fieldscaling(time):
             val = np.cos(time * 2 * np.pi * self.rf_freq)
             self._ray.append(val)
-            return val
+            return val*2 
 
         egrd = addnewegrddataset(ex=self._field._ex,
                                  ey=self._field._ey,

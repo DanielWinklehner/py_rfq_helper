@@ -1271,7 +1271,7 @@ class FieldLoader(object):
         # noinspection PyUnresolvedReferences
         [x, y, z, e_x, e_y, e_z] = getdatafromtextfile(filename, nskip=1, dims=[6, None])
 
-        self.parse_field(x, y, z, e_x, e_y, e_z)
+        self.parse_field(x, y, z, np.nan_to_num(e_x), np.nan_to_num(e_y), np.nan_to_num(e_z))
 
     def load_field_from_cells_tt(self, voltage, frequency, a_init, xy_limits, filename=None,
                                  resolution=0.002, ignore_rms=False):
