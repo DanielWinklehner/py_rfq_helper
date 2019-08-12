@@ -18,6 +18,10 @@ from PyQt5.QtCore import QThread
 import h5py
 from random import sample
 import datetime
+from mpi4py import MPI
+
+__author__ = "Jared Hwang"
+__doc__ = """Utilities for the PyRFQ Module"""
 
 colors = MyColors()
 
@@ -72,18 +76,110 @@ class PyRfqUtils(object):
     def _get_all_y_part(self, beamlist):
         return np.ravel([elem.gety() for elem in beamlist])
 
-
-    def find_bunch(self, bunch_beam, max_steps):
-
-        # if beamlist==None:
-        #     beamlist = self._beam
-
+    def find_bunch_p(self, bunch_beam, max_steps):
         self._max_steps_find_bunch = top.it + max_steps
         if (np.max(bunch_beam.getz()) < self._rfq._field._zmax):
             print("Particles have not yet reached the end of the RFQ. Abandoning bunch finding.")
             return None
 
         starttime = time.time()
+
+        for i in range(0, max_steps):
+            step(1)
+            self.measure_bunch_p(bunch_beam=bunch_beam)
+            if (self._bunchfound):
+                break
+
+        if (not self._bunchfound):
+            self._bunch_particles = None
+
+        endtime = time.time()
+        print("It took {} seconds to find a bunch.".format(endtime - starttime))
+
+        return self._bunch_particles
+
+    def measure_bunch_p(self, bunch_beam=None, beamlist=None):
+        if bunch_beam==None:
+            bunch_beam = self._beam[-1]
+
+        if beamlist==None:
+            beamlist = self._beam
+
+        if self._bunchfound:
+            return
+
+        if not self._velocity_calculated:
+            step_zdata = bunch_beam.getz()
+            crossedZ = np.where(np.logical_and(step_zdata>(self._zclose-0.005), step_zdata<(self._zclose + 0.005)))
+            velocities = bunch_beam.getvz()
+            particle_velocities = velocities[crossedZ]
+            self._velocityarray = np.concatenate((self._velocityarray, particle_velocities))
+            if (len(self._velocityarray) > self._velocity_count):
+                self._average_velocity = np.mean(self._velocityarray)
+                self._wavelength = self._average_velocity / self._rfq.rf_freq
+                self._velocity_calculated = True
+                self._zfar = self._zclose + self._wavelength
+                self._wavelengthbound = self._zfar
+                print('_wavelengthbound: {}'.format(self._wavelengthbound))
+                return
+        
+        elif self._velocity_calculated:
+        
+            print("self._zclose: {}  self._zfar: {}".format(self._zclose, self._zfar))
+            z_positions = [elem for elem in bunch_beam.getz() if (self._zclose < elem < self._zfar)]
+            print("Result: {},  Desired: {}".format(np.mean(z_positions), (self._zfar + self._zclose) / 2))
+            print("RestulR: {},  Desired:  {}".format(np.around(np.mean(z_positions), decimals=2), np.around((self._zfar + self._zclose) / 2, decimals=2)))
+
+            if (np.around(np.mean(z_positions), decimals=3) == (np.around(((self._zfar - self._zclose) / 2) + self._zclose, decimals=3))):
+                self._bunchfound = True
+                    
+                for beam in self._beam:
+
+                    step_zdata = beam.getz()
+                    bunchparticles_indices = np.where(np.logical_and(step_zdata>(self._zclose), step_zdata<(self._zfar)))
+                    self._bunch_particles[beam.name] = {}
+                    
+                    self._bunch_particles[beam.name]["x"] = beam.getx()[bunchparticles_indices]
+                    self._bunch_particles[beam.name]["y"] = beam.gety()[bunchparticles_indices]
+                    self._bunch_particles[beam.name]["z"] = beam.getz()[bunchparticles_indices]
+                    self._bunch_particles[beam.name]["r"] = beam.getr()[bunchparticles_indices]
+                    self._bunch_particles[beam.name]["theta"] = beam.gettheta()[bunchparticles_indices]
+                    self._bunch_particles[beam.name]["vx"] = beam.getvx()[bunchparticles_indices]
+                    self._bunch_particles[beam.name]["vy"] = beam.getvy()[bunchparticles_indices]
+                    self._bunch_particles[beam.name]["vz"] = beam.getvz()[bunchparticles_indices]
+                    self._bunch_particles[beam.name]["ux"] = beam.getux()[bunchparticles_indices]
+                    self._bunch_particles[beam.name]["uy"] = beam.getuy()[bunchparticles_indices]
+                    self._bunch_particles[beam.name]["uz"] = beam.getuz()[bunchparticles_indices]
+                    self._bunch_particles[beam.name]["xp"] = beam.getxp()[bunchparticles_indices]
+                    self._bunch_particles[beam.name]["yp"] = beam.getyp()[bunchparticles_indices]
+                    self._bunch_particles[beam.name]["rp"] = beam.getrp()[bunchparticles_indices]
+                    self._bunch_particles[beam.name]["gaminv"] = beam.getgaminv()[bunchparticles_indices]
+
+
+                bunch_particles = self._bunch_particles
+
+
+                i = 0
+                while os.path.exists("bunch_particles.%s.dump" % i):
+                    i += 1
+
+
+                comm = MPI.COMM_WORLD
+
+                comm.Barrier()
+                if (comm.Get_rank() == 0):
+                    pickle.dump(bunch_particles, open("bunch_particles.%s.dump" % i, "wb"))
+
+                print("Bunch found.")
+
+    def find_bunch(self, bunch_beam, max_steps):
+
+        self._max_steps_find_bunch = top.it + max_steps
+        if (np.max(bunch_beam.getz()) < self._rfq._field._zmax):
+            print("Particles have not yet reached the end of the RFQ. Abandoning bunch finding.")
+            return None
+
+        # starttime = time.time()
 
         for i in range(0, max_steps):
             step(1)
@@ -94,7 +190,7 @@ class PyRfqUtils(object):
         if (not self._bunchfound):
             self._bunch_particles = None
 
-        endtime = time.time()
+        # endtime = time.time()
         print("It took {} seconds to find a bunch.".format(endtime - starttime))
 
         return self._bunch_particles
@@ -116,7 +212,6 @@ class PyRfqUtils(object):
             velocities = bunch_beam.getvz()
             particle_velocities = velocities[crossedZ]
             self._velocityarray = np.concatenate((self._velocityarray, particle_velocities))
-
             if (len(self._velocityarray) > self._velocity_count):
                 self._average_velocity = np.mean(self._velocityarray)
                 self._wavelength = self._average_velocity / self._rfq.rf_freq
@@ -168,6 +263,10 @@ class PyRfqUtils(object):
                 while os.path.exists("bunch_particles.%s.dump" % i):
                     i += 1
 
+
+                comm = MPI.COMM_WORLD
+
+                comm.Barrier()
                 pickle.dump(bunch_particles, open("bunch_particles.%s.dump" % i, "wb"))
 
                 print("Bunch found.")
@@ -619,7 +718,6 @@ class PyRfqUtils(object):
         step_grp = self._particle_outfile.create_group(step_str)
 
         for beam in beamlist:
-
             _npart = beam.getn()
             _mass = beam.sm
 
@@ -643,3 +741,50 @@ class PyRfqUtils(object):
 
         for key in _part_data:
             step_grp.create_dataset(key, data=_part_data[key])
+
+    def write_hdf5_data_p(self, step_num, beamlist=None):
+        if beamlist == None:
+            beamlist = self._beam
+
+        comm = MPI.COMM_WORLD
+
+        if (comm.Get_rank() == 0):
+            if not self._data_out_called:
+                date = datetime.datetime.today()
+                filename = date.strftime('%Y-%m-%dT%H:%M') + "_particle_data.hdf5"
+                self._particle_outfile = h5py.File(filename, 'w')
+                self._particle_outfile.attrs.__setitem__('PY_RFQ_HELPER', b'0.0.1')
+                self._data_out_called = True
+
+        step_str = "Step#{}".format(step_num)
+
+        _part_data = {'x': [], 'y': [], 'z': [], 'px': [], 'py': [], 'pz': [], 'm': [], 'q': [], "ENERGY": [],
+                      'vx': [], 'vy': [], 'vz': [], 'ux': [], 'uy': [], 'uz': [], 'xp': [], 'yp': []}
+
+        for beam in beamlist:
+            _npart = beam.getn()
+            _mass = beam.sm
+
+            _part_data['x'] = np.concatenate((_part_data['x'], beam.getx())) 
+            _part_data['y'] = np.concatenate((_part_data['y'], beam.gety())) 
+            _part_data['z'] = np.concatenate((_part_data['z'], beam.getz())) 
+            _part_data['px'] = np.concatenate((_part_data['px'], beam.getux() * _mass)) 
+            _part_data['py'] = np.concatenate((_part_data['py'], beam.getuy() * _mass)) 
+            _part_data['pz'] = np.concatenate((_part_data['pz'], beam.getuz() * _mass))  
+            _part_data['m'] = np.concatenate((_part_data['m'], np.full(_npart, _mass)))
+            _part_data['q'] = np.concatenate((_part_data['q'], np.full(_npart, beam.charge)))
+            _part_data['ENERGY'] = np.concatenate((_part_data['ENERGY'], np.full(_npart, beam.ekin)))
+            _part_data['vx'] = np.concatenate((_part_data['vx'], beam.getvx()))
+            _part_data['vy'] = np.concatenate((_part_data['vy'], beam.getvy()))
+            _part_data['vz'] = np.concatenate((_part_data['vz'], beam.getvz()))
+            _part_data['ux'] = np.concatenate((_part_data['ux'], beam.getux()))
+            _part_data['uy'] = np.concatenate((_part_data['uy'], beam.getuy()))
+            _part_data['uz'] = np.concatenate((_part_data['uz'], beam.getuz()))
+            _part_data['xp'] = np.concatenate((_part_data['xp'], beam.getxp()))
+            _part_data['yp'] = np.concatenate((_part_data['yp'], beam.getyp()))
+
+
+        if (comm.Get_rank() == 0):
+            step_grp = self._particle_outfile.create_group(step_str)
+            for key in _part_data:
+                step_grp.create_dataset(key, data=_part_data[key])

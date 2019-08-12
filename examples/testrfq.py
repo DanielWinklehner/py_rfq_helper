@@ -12,7 +12,12 @@ import pyqtgraph as pg
 from pyqtgraph.Qt import QtGui, QtCore
 from PyQt5.QtCore import QThread
 from random import sample
+from mpi4py import MPI
 from my_pzplots import *
+
+__author__ = "Jared Hwang"
+__doc__ = """Example PyRFQ Simulation"""
+
 
 colors = MyColors()
 
@@ -95,9 +100,9 @@ def main():
     # Initialization of basic RFQ parameters
     VANE_RAD   = 1 * cm    # radius of vane cylinder
     VANE_DIST  = 2.5 * cm  # distance of vane center to central axis
-    NX, NY, NZ = 64, 64, 1024
+    NX, NY, NZ = 32, 32, 512
     PRWALL     = 0.04
-    D_T        = 1e-10
+    D_T        = 1e-9
     RF_FREQ    = 32.8e6
     Z_START    = 0.01  #the start of the rfq
     SIM_START  = -0.014
@@ -115,7 +120,7 @@ def main():
     w3d.ymmin = -PRWALL
     w3d.ny    =  NY
 
-    w3d.zmmax =  1.456 + 0.5
+    w3d.zmmax =  1.456 + 0.3
     w3d.zmmin =  SIM_START
     w3d.nz    =  NZ
 
@@ -256,7 +261,7 @@ def main():
     
     
     w3d.l_inj_user_particles_v = true
-    w3d.l_inj_user_particles_z = true
+    # w3d.l_inj_user_particles_z = true
     top.linj_enormcl = false
     top.linj_efromgrid = true
 
@@ -393,26 +398,25 @@ def main():
     generate()
 
     # PyQtgraph setup
-    app = pg.mkQApp()
+    # app = pg.mkQApp()
 
     # rms_x.plot(pen=pg.mkPen(width=1, color='g'), size=1)
 
-    # colors = MyColors()
-
-    utils.rms_plot_setup(title="X and Y RMS (twice rms) vs Z", labels={'left':('X, Y', 'm'), 'bottom':('Z', 'm')})
+    # utils.rms_plot_setup(title="X and Y RMS (twice rms) vs Z", labels={'left':('X, Y', 'm'), 'bottom':('Z', 'm')})
     
     @callfromafterstep
     def makeplots():
-        if top.it%10 == 0:
-            # utils.plot_rms()
-            utils.beamplots()
-            # print(h2_beam.getux())
-            # window()
-            # limits(-0.1, 1, -0.01, 0.01)
-            # pzxedges(color='blue')
-            # pzyedges(color='red')
-            # fma()
-            # refresh() 
+        if top.it > 0:
+            if top.it%2 == 0:
+                # utils.plot_rms()
+                utils.beamplots()
+                # print(h2_beam.getux())
+                # window()
+                # limits(-0.1, 1, -0.01, 0.01)
+                # pzxedges(color='blue')
+                # pzyedges(color='red')
+                # fma()
+                # refresh() 
 
 
     # utils.particle_plot_setup(title="X and Y Particles vs Z", labels={'left':('X, Y', 'm'), 'bottom':('Z', 'm')})
@@ -422,21 +426,32 @@ def main():
     #     if top.it%5 == 1:
     #         utils.plot_particles(factor=0.2)
 
+    # comm = MPI.COMM_WORLD
+
+    PARTICLE_OUTPUT_STARTSTEP = 19000
+    PARTICLE_OUTPUT_FRAME_FREQ = 10
+
     @callfromafterstep
     def output_particles():
-        if top.it%10 == 0:
-            utils.write_hdf5_data(top.it, [h2_beam])
+        if top.it > PARTICLE_OUTPUT_STARTSTEP:
+            if top.it%PARTICLE_OUTPUT_FRAME_FREQ == 0:
+                utils.write_hdf5_data_p(top.it, [h2_beam])
 
 
     starttime = time.time()
-    step(20000)
+    step(1000)
     hcp()
     endtime = time.time()  
     print("Elapsed time for simulation: {} seconds".format(endtime-starttime))
         
-    bunch = utils.find_bunch(h2_beam, max_steps=10000)
+    # print("hello world")
+    # comm.Barrier()
+    # bunch = utils.find_bunch_p(h2_beam, max_steps=10000)
 
+    # dump()
+    # print(h2_beam.getz())
     # sys.exit(app.exec_()) 
+
 
 
 

@@ -17,8 +17,14 @@ import random
 import re
 import math
 
+__author__ = "Jared Hwang"
+__doc__ = """MP4 creator using particle data"""
+
+
 colors = MyColors()
 
+# Read file data and sort it into dictionary for easy access later
+# Sorts into dictionary categorized by species (identified with mass and charge)
 def catalogue_data(f):
 
     print("cataloguing...")
@@ -43,8 +49,8 @@ def catalogue_data(f):
             data_dict[key][keyname]['y'] = f[key]['y']
             data_dict[key][keyname]['z'] = f[key]['z']
 
-
     else:
+        print('There is more than one species!')
         for key in f.keys():
             print(key)
             data_dict[key] = {}
@@ -70,9 +76,11 @@ def catalogue_data(f):
     return data_dict
 
 
+# Plots X by Z on the top plot, and Y by Z on the bottom plot
+# Functions with multiple species
 def side_by_side_plot(data, zlim=(-0.1,2),vert_lim=(-0.01,0.01),
                       point_size=0.5, xcolor=colors[5], ycolor=colors[6],
-                      yscale=1e-2, yunits='cm', frames=2000, figsize=(20,10)):
+                      yscale=1e-2, yunits='cm', frames=2000, figsize=(20,10), fps=30):
 
     num_species = len(data['SpeciesIdList'])
 
@@ -85,9 +93,7 @@ def side_by_side_plot(data, zlim=(-0.1,2),vert_lim=(-0.01,0.01),
         plot_array += (ax1.plot([], [], 'bo', ms=point_size, color=colors[i]))
         plot_array += (ax2.plot([], [], 'bo', ms=point_size, color=colors[i]))
 
-    # particlesx, = ax1.plot([], [], 'bo', ms=point_size, color=xcolor)
-    # particlesy, = ax2.plot([], [], 'bo', ms=point_size, color=ycolor)
-
+    # Axes scalers
     ticks_y = ticker.FuncFormatter(lambda x, pos: '{0:g}'.format(x/yscale))
     ax1.yaxis.set_major_formatter(ticks_y)
     ax2.yaxis.set_major_formatter(ticks_y)
@@ -99,23 +105,28 @@ def side_by_side_plot(data, zlim=(-0.1,2),vert_lim=(-0.01,0.01),
     ax2.set_ylabel('Y ' + '(' + yunits + ')')
 
     step_list = [item[5:] for item in list(data.keys())]
+
+    # Sets up plots
     def init():
         ax1.set_xlim(zlim)
         ax1.set_ylim(vert_lim)
         ax2.set_xlim(zlim)
         ax2.set_ylim(vert_lim)
         return plot_array 
-        # return plot_array,
-        # return particlesx, particlesy,
 
+    # Plots a frame of the animation
     def animate(i):
         print("Frame {}".format(i))
         if str(i) in step_list:
             step_str = "Step#" + str(i)
+
+            # For every species identified in the cataloguing
             for species in data['SpeciesIdList']:
                 x = data[step_str]['Species:'+str(species)]['x']
                 y = data[step_str]['Species:'+str(species)]['y']
                 z = data[step_str]['Species:'+str(species)]['z']
+
+                # Ensures each species is given a different color as defined above
                 plot_array[2*species].set_data(z, x)
                 (plot_array[2*species + 1]).set_data(z, y)
         return plot_array
@@ -126,13 +137,15 @@ def side_by_side_plot(data, zlim=(-0.1,2),vert_lim=(-0.01,0.01),
 
     date = datetime.datetime.today()
     filename = date.strftime('%Y-%m-%dT%H.%M') + "_simulation_video.mp4"
-    ani.save(filename, fps=60, extra_args=['-vcodec', 'libx264'])
+    ani.save(filename, fps=fps, extra_args=['-vcodec', 'libx264'])
 
     return
 
+# Plots X by Z and Y by Z on the same subplot
+# Does NOT differentiate species by color (yet?)
 def overlaid_plot(data, zlim=(-0.1,2),vert_lim=(-0.01,0.01),
                   point_size=0.5, xcolor=colors[5], ycolor=colors[6],
-                  yscale=1e-2, yunits='cm', frames=2000, figsize=(20,8)):
+                  yscale=1e-2, yunits='cm', frames=2000, figsize=(20,8), fps=30):
 
     fig, ax = plt.subplots(figsize=figsize)
     particlesx, = plt.plot([], [], 'bo', ms=point_size, color=xcolor)
@@ -170,20 +183,18 @@ def overlaid_plot(data, zlim=(-0.1,2),vert_lim=(-0.01,0.01),
 
     date = datetime.datetime.today()
     filename = date.strftime('%Y-%m-%dT%H.%M') + "_simulation_video.mp4"
-    ani.save(filename, fps=60, extra_args=['-vcodec', 'libx264'])
+    ani.save(filename, fps=fps, extra_args=['-vcodec', 'libx264'])
 
 
 def produce_particle_mp4(overlaid=False, darkmode=True, filename=None, zlim=(-0.1,2),vert_lim=(-0.01,0.01),
                   point_size=0.5, xcolor=colors[5], ycolor=colors[6],
-                  yscale=1e-2, yunits='cm', frames=50, figsize=(20,8)):
+                  yscale=1e-2, yunits='cm', frames=50, figsize=(20,8), fps=30):
     
     if filename == None:
         fd = FileDialog()
         filename = fd.get_filename()
 
     f = h5py.File(filename, 'r')
-    # data = f['particle_data']
-
 
     if darkmode:
         plt.style.use('dark_background')
@@ -191,11 +202,13 @@ def produce_particle_mp4(overlaid=False, darkmode=True, filename=None, zlim=(-0.
     if overlaid:
         overlaid_plot(f, zlim=zlim,vert_lim=vert_lim,
                   point_size=point_size, xcolor=xcolor, ycolor=ycolor,
-                  yscale=yscale, yunits=yunits, frames=frames, figsize=figsize)
+                  yscale=yscale, yunits=yunits, frames=frames, figsize=figsize, fps=fps)
     else:
         side_by_side_plot(catalogue_data(f), zlim=zlim,vert_lim=vert_lim,
                   point_size=point_size, xcolor=xcolor, ycolor=ycolor,
-                  yscale=yscale, yunits=yunits, frames=frames, figsize=figsize)
+                  yscale=yscale, yunits=yunits, frames=frames, figsize=figsize, fps=fps)
+
+
 
 def main():
     overlaid = False
@@ -207,9 +220,11 @@ def main():
         darkmode = False
         sys.argv.remove('-l')
 
+    # Video and plot settings are contained in file called PyRFQPlotSettings.txt for now
     with open('PyRFQPlotSettings.txt') as fp:
         lines = fp.readlines()
 
+    # Extract value from settings list
     floatregex = '[-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?' # courtesy of https://www.regular-expressions.info/floatingpoint.html
     for line in lines:
         line = line.replace('\n', '')
@@ -244,6 +259,8 @@ def main():
             figsizex = int(re.search(floatregex, line).group())
         elif 'FIGSIZEY' in line: 
             figsizey = int(re.search(floatregex, line).group())
+        elif 'FPS' in line:
+            fps = int(re.search(floatregex,line).group())
 
     filename = None
     if (len(sys.argv) > 1):
@@ -253,7 +270,7 @@ def main():
     produce_particle_mp4(overlaid=overlaid, darkmode=darkmode, filename=filename,
                          zlim=(zmin,zmax),vert_lim=(vertmin,vertmax),
                          point_size=pointsize, xcolor=xcolor, ycolor=ycolor,
-                         yscale=yscale, yunits=yunits, frames=frames, figsize=(figsizex, figsizey))
+                         yscale=yscale, yunits=yunits, frames=frames, figsize=(figsizex, figsizey), fps=fps)
     endtime = time.time()  
 
     print("Elapsed time for animating: {} seconds".format(endtime-starttime))
