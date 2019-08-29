@@ -701,7 +701,7 @@ class PyRfqUtils(object):
             # Store data to identify species later
             beam_identifier_list = self._particle_outfile.create_group('SpeciesList')
             for beam in beamlist:
-                beam_identifier_list.create_dataset(beam.name, data=[beam.sm, beam.charge])
+                beam_identifier_list.create_dataset(beam.name, data=[beam.sm, beam.charge, beam.charge_state, beam.type.A, beam.type.Z])
 
 
         step_str = "Step#{}".format(step_num)
@@ -759,7 +759,7 @@ class PyRfqUtils(object):
                 beam_identifier_list = self._particle_outfile.create_group('SpeciesList')
                 for beam in beamlist:
                     # MASS, CHARGE
-                    beam_identifier_list.create_dataset(beam.name, data=[beam.mass, beam.charge])
+                    beam_identifier_list.create_dataset(beam.name, data=[beam.mass, beam.charge, beam.charge_state, beam.type.A, beam.type.Z])
 
 
         step_str = "Step#{}".format(step_num)
@@ -785,16 +785,16 @@ class PyRfqUtils(object):
                 vz_gathered = np.array(list(itertools.chain.from_iterable(vz_gathered)))
                 _npart = len(x_gathered)
                 _mass = beam.mass
-                # px_gathered = vx_gathered * _mass
-                # py_gathered = vy_gathered * _mass
-                # pz_gathered = vz_gathered * _mass
+                px_gathered = vx_gathered * _mass
+                py_gathered = vy_gathered * _mass
+                pz_gathered = vz_gathered * _mass
 
                 _part_data['x'] = np.concatenate((_part_data['x'], x_gathered))
                 _part_data['y'] = np.concatenate((_part_data['y'], y_gathered))
                 _part_data['z'] = np.concatenate((_part_data['z'], z_gathered))
-                # _part_data['px'] = np.concatenate((_part_data['px'], px_gathered)) # momenta
-                # _part_data['py'] = np.concatenate((_part_data['py'], py_gathered))
-                # _part_data['pz'] = np.concatenate((_part_data['pz'], pz_gathered)) 
+                _part_data['px'] = np.concatenate((_part_data['px'], px_gathered)) # momenta
+                _part_data['py'] = np.concatenate((_part_data['py'], py_gathered))
+                _part_data['pz'] = np.concatenate((_part_data['pz'], pz_gathered)) 
                 _part_data['m'] = np.concatenate((_part_data['m'], np.full(_npart, _mass)))
                 _part_data['q'] = np.concatenate((_part_data['q'], np.full(_npart, beam.charge)))
                 _part_data['ENERGY'] = np.concatenate((_part_data['ENERGY'], np.full(_npart, beam.ekin)))

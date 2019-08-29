@@ -113,8 +113,8 @@
 ~~~text
 f = {    
          'SpeciesList':    {
-                            'H2_1+': [mass, charge]
-                            'P_1+': [mass, charge]
+                            'H2_1+': [mass, charge, charge_state, A, Z]
+                            'P_1+': [mass, charge, charge_state, A, Z]
                             ...
                            }            
          'Step#1':         {
