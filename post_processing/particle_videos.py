@@ -348,7 +348,7 @@ def main():
         sys.argv.remove('-l')
 
     # Video and plot settings are contained in file called PyRFQPlotSettings.txt for now
-    with open('PyRFQBeamVideoSettings.txt') as fp:
+    with open('PyRFQPlotSettings.txt') as fp:
         lines = fp.readlines()
 
     # Extract value from settings list

@@ -1,6 +1,10 @@
 import numpy as np
 from scipy import constants as const
 
+# COPIED VERSION OF IONSPECIES FOR DANS PYMODULES AS DANS PYMODULES IS UNDERGOING LARGE STRUCTURAL CHANGES
+# CAN BE REPLACED LATER
+
+
 __author__ = "Daniel Winklehner, Philip Weigel"
 __doc__ = "Simple class to hold and calculate particle data like energy, mass, charge, etc."
 

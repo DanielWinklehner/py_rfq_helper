@@ -89,18 +89,13 @@ def load_from_ibsimu(filename):
 
 
 def main():
-    # FIELD_FILENAME  = "input/vecc_rfq_004_py.dat"
-    # FILENAME  = "input/PARMTEQOUT.TXT"
-    # FILENAME  = "input/Parm_50_63cells.dat"
-    # FILENAME  = "input/fieldoutput.txt"
-    # FIELD_FILENAME  = "input/fieldw015width.dat"
     FIELD_FILENAME = 'input/2019_07_23_PyRFQ_Test_Field_Voltage_25kV_W_In15keV_W_Out_60keV.txt'
 
 
     # Initialization of basic RFQ parameters
     VANE_RAD   = 1 * cm    # radius of vane cylinder
     VANE_DIST  = 2.5 * cm  # distance of vane center to central axis
-    NX, NY, NZ = 32, 32, 512
+    NX, NY, NZ = 16, 16, 512
     PRWALL     = 0.04
     D_T        = 1e-9
     RF_FREQ    = 32.8e6
@@ -149,7 +144,7 @@ def main():
 
 
     ## RFQ specification and declaration
-    rfq = PyRFQ(filename=FIELD_FILENAME, from_cells=False, twoterm=True, boundarymethod=False)
+    rfq = PyRFQ(filename=FIELD_FILENAME, from_cells=False, twoterm=False, boundarymethod=False)
     rfq.vane_radius    = VANE_RAD
     rfq.vane_distance  = VANE_DIST
     rfq.zstart         = Z_START
@@ -158,6 +153,7 @@ def main():
     rfq.sim_end_buffer = 0.5
     rfq.resolution     = 0.002
     rfq.endplates      = False
+    rfq.field_scaling_factor = 2
 
     rfq.xy_limits = [-0.03, 0.03, -0.03, 0.03]
     rfq.z_limits  = [0, 1.5]
@@ -168,38 +164,14 @@ def main():
     # rfq.cyl_id         = 0.1
     # rfq.grid_res_bempp = 0.005 
     # rfq.pot_shift      = 3.0 * 22000.0
-    rfq.ignore_rms  = False
+    # rfq.ignore_rms  = False
     rfq.simple_rods = True
 
     rfq.setup()
     rfq.install()
 
-    twiss_emitx = 1.8e-6 /6
-    twiss_emity = 1.8e-6 /6
-    twiss_alphax = 1.9896856 #dimensionless
-    twiss_alphay = 1.9896856
-    twiss_alphaz = 0
-    twiss_betax = 13.241259 *cm / mm # cm/mrad
-    twiss_betay = 13.241259 *cm / mm
-    twiss_betaz = 45
-    twiss_gammax = (1 + twiss_alphax**2) / twiss_betax
-    twiss_gammay = (1 + twiss_alphay**2) / twiss_betay
 
-    # print("xalpha: {}  xbeta: {}  xgamma: {}".format(twiss_alphax, twiss_betax, twiss_gammax))
-
-    beamxangle = -sqrt(twiss_emitx * twiss_gammax)
-    beamx = sqrt(twiss_emitx * twiss_betax)
-    beamyangle = -sqrt(twiss_emity * twiss_gammay)
-    beamy = sqrt(twiss_emity * twiss_betay)
-
-    print("beamxangle: {} ".format(beamxangle))
-
-    # pp = Species(type=Proton, charge_state=pd[0].ion.z(), name=pd[0].ion.name())
-
-
-
-
-
+    ##################################### WARP BEAM
     # beam = Species(type=Dihydrogen, charge_state=pd[1].ion.z(), name=pd[1].ion.name())
     # beam = Species(type=Dihydrogen, charge_state=+1, name="H2+", color=red)
 
@@ -210,6 +182,23 @@ def main():
     # beam.vthz  = 0.0  # axial velocity spread [m/s ec]
     
     # # Beam centroid and envelope initial conditions
+
+    # twiss_emitx = 1.8e-6 /6
+    # twiss_emity = 1.8e-6 /6
+    # twiss_alphax = 1.9896856 #dimensionless
+    # twiss_alphay = 1.9896856
+    # twiss_alphaz = 0
+    # twiss_betax = 13.241259 *cm / mm # cm/mrad
+    # twiss_betay = 13.241259 *cm / mm
+    # twiss_betaz = 45
+    # twiss_gammax = (1 + twiss_alphax**2) / twiss_betax
+    # twiss_gammay = (1 + twiss_alphay**2) / twiss_betay
+
+    # beamxangle = -sqrt(twiss_emitx * twiss_gammax)
+    # beamx = sqrt(twiss_emitx * twiss_betax)
+    # beamyangle = -sqrt(twiss_emity * twiss_gammay)
+    # beamy = sqrt(twiss_emity * twiss_betay)
+
     # beam.x0  = 0.0  # initial x-centroid xc = <x> [m]
     # beam.y0  = 0.0  # initial y-centroid yc = <y> [m]
     # beam.xp0 = 0.0  # initial x-centroid angle xc' = <x'> = d<x>/ds [rad]
@@ -220,13 +209,12 @@ def main():
     # beam.bp0 = beamyangle
 
 
-
-
-
     # beam.a0  = 5 * mm  # initial x-envelope edge a = 2*sqrt(<(x-xc)^2>) [m]
     # beam.b0  = 5 * mm  # initial y-envelope edge b = 2*sqrt(<(y-yc)^2>) [m]
     # beam.ap0 = -0.06 # initial x-envelope angle ap = a' = d a/ds [rad]
     # beam.bp0 = -0.06  # initial y-envelope angle bp = b' = d b/ds [rad]
+    ###########################################################
+
 
     ##################################### PARTICLE DISTRIBUTION
     current, mass, x, vx, y, vy, z, vz = load_from_ibsimu('./input/particle_out_461mm_n5kv_10ma_20KV.txt')
@@ -241,7 +229,7 @@ def main():
     h2_current = sum([i for i, _, _, _, _, _, _, _ in h2_list])
     proton_current = sum([i for i, _, _, _, _, _, _, _ in proton_list])
 
-    h2_beam = Species(type=Dihydrogen, charge_state=+1, name="H2+", color=blue)
+    h2_beam = Species(type=Dihydrogen, charge_state=+1, name="H2_1+", color=blue)
     proton_beam = Species(type=Proton, charge_state=+1, name="P", color=red)
 
     top.ainject = 0.05
@@ -251,25 +239,22 @@ def main():
     h2_beam.ekin = 15.*kV
     proton_beam.ekin = 15.*kV
 
-
     # beam.ekin  = 15.*kV      # ion kinetic energy [eV] [eV]
     # beam.ibeam = 10 * mA  # compensated beam current [A]
     # beam.emitx = 1e-6  # beam x-emittance, rms edge [m-rad]
     # beam.emity = 1e-6  # beam y-emittance, rms edge [m-rad]
     # beam.vthz  = 0.0  # axial velocity spread [m/s ec]
 
-    
-    
+    # injection required flags
     w3d.l_inj_user_particles_v = true
-    # w3d.l_inj_user_particles_z = true
     top.linj_enormcl = false
     top.linj_efromgrid = true
 
     h2_beam_id = 0
     proton_beam_id = 1
 
-
-    total_parts_per_step = 1000
+    # Adding in amount of particles proportional to total number in distribution
+    total_parts_per_step = 500
     h2_per_step = int(total_parts_per_step * (h2_num / (h2_num + proton_num)))
     prot_per_step = int(total_parts_per_step * (proton_num / (h2_num + proton_num)))
 
@@ -306,34 +291,6 @@ def main():
 
     installuserparticlesinjection(injectionsource)
 
-    def createmybeam():
-        total_part_num = 1000
-        h2_part_num = int(total_part_num * (h2_num / (h2_num + proton_num)))
-        proton_part_num = int(total_part_num * (proton_num / (h2_num + proton_num)))
-
-        idx = np.random.choice(np.arange(len(h2_list)), h2_part_num, replace=False)
-        h2_inject = h2_list[idx]
-        h2_curr, h2_mass, h2_x, h2_vx, h2_y, h2_vy, h2_z, h2_vz = list(zip(*h2_inject))
-
-        h2_beam.addparticles(x=h2_x,
-                             y=h2_y,
-                             z=h2_z,
-                             vx=h2_vx,
-                             vy=h2_vy,
-                             vz=h2_vz)
-
-        idx = np.random.choice(np.arange(len(proton_list)), proton_part_num, replace=False)
-        proton_inject = proton_list[idx]
-        p_curr, p_mass, p_x, p_vx, p_y, p_vy, p_z, p_vz = list(zip(*proton_inject))
-
-        proton_beam.addparticles(x=p_x,
-                                 y=p_y,
-                                 z=p_z,
-                                 vx=p_vx,
-                                 vy=p_vy,
-                                 vz=p_vz)
-    
-    # installuserinjection(createmybeam)
 
     # Beam centroid and envelope initial conditions
     h2_beam.x0  = 0.0  # initial x-centroid xc = <x> [m]
@@ -362,10 +319,11 @@ def main():
     top.zbeam = 0.0
     top.pgroup.nps = 0
 
-
-    # utils = PyRfqUtils(rfq, [h2_beam, proton_beam])
     utils = PyRfqUtils(rfq, [h2_beam, proton_beam])
 
+
+    ##################################### MESH REFINEMENT
+    # note: after testing, using mesh refinement appeared to be slower than not using it, ergo commented out
     # boundaries = utils.find_vane_mesh_boundaries(NX, SIM_START, w3d.zmmax, -PRWALL, PRWALL, VANE_DIST, VANE_RAD)
 
 
@@ -385,51 +343,51 @@ def main():
     #                                         maxs=boundaries["eastmaxs"],
     #                                         refinement=[4,4,4])
 
-
     # # Mesh refinement for the center of the beam
     # childmesh = refinedsolver.addchild(mins=[-VANE_DIST+VANE_RAD, -VANE_DIST+VANE_RAD, SIM_START], 
     #                                    maxs=[ VANE_DIST-VANE_RAD,  VANE_DIST-VANE_RAD, w3d.zmmax],
     #                                    refinement=[4,4,4])
-
+    #########################################
 
     derivqty()
 
     package("w3d")
     generate()
 
-    # PyQtgraph setup
+    # WARP built in plotting 
+    # @callfromafterstep
+    # def makeplots():
+    #     if top.it > 19900:
+    #         if top.it%10 == 0:
+    #             # utils.plot_rms()
+    #             utils.beamplots()
+    #             # print(h2_beam.getux())
+    #             # window()
+    #             # limits(-0.1, 1, -0.01, 0.01)
+    #             # pzxedges(color='blue')
+    #             # pzyedges(color='red')
+    #             # fma()
+    #             # refresh() 
+
+    ################################# PyQTGraph RMS plotting
+    # # PyQtgraph setup
     # app = pg.mkQApp()
 
-    # rms_x.plot(pen=pg.mkPen(width=1, color='g'), size=1)
+    # # Setup the rms plot
+    # utils.rms_plot_setup(title="X and Y RMS (twice rms) vs Z", labels={'left':('X, Y', 'm'), 'bottom':('Z', 'm')}, 
+    #                      xrange=[-0.1, 1.6], yrange=[-0.015, 0.015])
 
-    # utils.rms_plot_setup(title="X and Y RMS (twice rms) vs Z", labels={'left':('X, Y', 'm'), 'bottom':('Z', 'm')})
-    
-    @callfromafterstep
-    def makeplots():
-        if top.it > 0:
-            if top.it%2 == 0:
-                # utils.plot_rms()
-                utils.beamplots()
-                # print(h2_beam.getux())
-                # window()
-                # limits(-0.1, 1, -0.01, 0.01)
-                # pzxedges(color='blue')
-                # pzyedges(color='red')
-                # fma()
-                # refresh() 
-
-
-    # utils.particle_plot_setup(title="X and Y Particles vs Z", labels={'left':('X, Y', 'm'), 'bottom':('Z', 'm')})
+    # ## setup the particle plots. Not recommended, slows down simulation immensely    
+    # # utils.particle_plot_setup(title="X and Y Particles vs Z", labels={'left':('X, Y', 'm'), 'bottom':('Z', 'm')})
 
     # @callfromafterstep
     # def plotpyqt():
-    #     if top.it%5 == 1:
-    #         utils.plot_particles(factor=0.2)
+    #     if top.it%2 == 1:
+    #         utils.plot_rms()
 
-    # comm = MPI.COMM_WORLD
-
-    PARTICLE_OUTPUT_STARTSTEP = 19000
-    PARTICLE_OUTPUT_FRAME_FREQ = 10
+    STEP_NUM = 2000
+    PARTICLE_OUTPUT_STARTSTEP = 1800
+    PARTICLE_OUTPUT_FRAME_FREQ = 2
 
     @callfromafterstep
     def output_particles():
@@ -439,22 +397,12 @@ def main():
 
 
     starttime = time.time()
-    step(1000)
+    step(STEP_NUM)
     hcp()
     endtime = time.time()  
     print("Elapsed time for simulation: {} seconds".format(endtime-starttime))
         
-    # print("hello world")
-    # comm.Barrier()
     # bunch = utils.find_bunch_p(h2_beam, max_steps=10000)
-
-    # dump()
-    # print(h2_beam.getz())
-    # sys.exit(app.exec_()) 
-
-
-
-
 
 
 if __name__ == '__main__':

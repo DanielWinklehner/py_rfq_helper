@@ -10,6 +10,10 @@ import time
 import pickle
 import os
 
+
+__author__ = "Jared Hwang"
+__doc__ = """Inherited version of the Dan's pymodules particle distribution"""
+
 # Some constants
 clight = const.value("speed of light in vacuum")  # (m/s)
 amu_kg = const.value("atomic mass constant")  # (kg)
@@ -142,14 +146,18 @@ class BunchParticleDistribution(ParticleDistribution):
         # Longitudinal Emittance
         z_beta_rel = self.vz / clight
         z_gamma_rel = 1.0 / np.array(np.sqrt(1.0 - z_beta_rel ** 2.0))
-
-        z_ekin = (gamma_rel - 1.0) * self.ion.mass_mev() # Per particle
+        
+        z_ekin = (z_gamma_rel - 1.0) * self.ion.mass_mev() # Per particle
         z_ekin_std = np.std(z_ekin)
+
         wavelength = np.mean(self.vz) / self._rfq_freq
-        z_phase = 2 * np.pi * self.z / wavelength
+        
+        z_phase = 360 * self.z / wavelength
         z_phase_std = np.std(z_phase)
 
-        e_elongphase = z_ekin_std * z_phase_std
+        EZP_std = np.mean((z_ekin - np.mean(z_ekin)) * (z_phase - np.mean(z_phase)))
+
+        e_elongphase = np.sqrt((z_ekin_std * z_phase_std)**2 - (EZP_std)**2)
         en_elongphase = self.ion.beta() * self.ion.gamma() * e_elongphase
 
 

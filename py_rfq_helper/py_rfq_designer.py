@@ -2474,6 +2474,7 @@ class PyRFQ(object):
         self.sim_start      = 0.0   # start of the simulation
         self.sim_end_buffer = 0.0   # added distance not part of RFQ but part of simulation
         self.resolution     = 0.002
+        self.field_scaling_factor = 1 # factor to scale the e field magnitude by
         
         #optional
         self.endplates      = False
@@ -3633,7 +3634,7 @@ class PyRFQ(object):
         def fieldscaling(time):
             val = np.cos(time * 2 * np.pi * self.rf_freq)
             self._ray.append(val)
-            return val*2 
+            return val*self.field_scaling_factor
 
         egrd = addnewegrddataset(ex=self._field._ex,
                                  ey=self._field._ey,

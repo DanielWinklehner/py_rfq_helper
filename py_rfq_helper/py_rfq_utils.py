@@ -19,6 +19,7 @@ import h5py
 from random import sample
 import datetime
 from mpi4py import MPI
+import itertools
 
 __author__ = "Jared Hwang"
 __doc__ = """Utilities for the PyRFQ Module"""
@@ -64,7 +65,7 @@ class PyRfqUtils(object):
 
         self._data_out_called = False
 
-        winon()
+        # winon()
 
     # Helper functions to get all particles from all beams
     def _get_all_z_part(self, beamlist):
@@ -127,8 +128,7 @@ class PyRfqUtils(object):
         
             print("self._zclose: {}  self._zfar: {}".format(self._zclose, self._zfar))
             z_positions = [elem for elem in bunch_beam.getz() if (self._zclose < elem < self._zfar)]
-            print("Result: {},  Desired: {}".format(np.mean(z_positions), (self._zfar + self._zclose) / 2))
-            print("RestulR: {},  Desired:  {}".format(np.around(np.mean(z_positions), decimals=2), np.around((self._zfar + self._zclose) / 2, decimals=2)))
+            print("Restul: {},  Desired:  {}".format(np.around(np.mean(z_positions), decimals=3), np.around((self._zfar + self._zclose) / 2, decimals=3)))
 
             if (np.around(np.mean(z_positions), decimals=3) == (np.around(((self._zfar - self._zclose) / 2) + self._zclose, decimals=3))):
                 self._bunchfound = True
@@ -623,6 +623,8 @@ class PyRfqUtils(object):
         #     ptitles("Beam Y edges (ybar+-2*rms)",titleb,"(m)",
         #             gettitler(js))
 
+
+    # Setup the PyQTGraph realtime RMS Plot
     def rms_plot_setup(self, xpen=pg.mkPen(width=1.5, color=colors[6]), ypen=pg.mkPen(width=1.5,color=colors[5]),
                         xrange=[-0.1,1], yrange=[-0.01,0.01], title=None, labels=None):
         self._view = pg.PlotWidget(title=title, labels=labels)
@@ -639,6 +641,7 @@ class PyRfqUtils(object):
 
     def plot_rms(self):
         #   pzxedges: Plots beam X and Y edges (centroid +- twice Xrms) versus Z
+        #   Call me every time step
         self._view.show()
         self.plot_xedges(self._x_top_rms, self._x_bottom_rms)
         self.plot_yedges(self._y_top_rms, self._y_bottom_rms)
@@ -648,6 +651,7 @@ class PyRfqUtils(object):
 
     def particle_plot_setup(self, xpen=pg.mkPen(width=1, color=colors[6]), ypen=pg.mkPen(width=1, color=colors[5]),
                             symbol='s', size=0.25, xrange=[-0.1,1], yrange=[-0.01,0.01], title=None, labels=None):
+        # Setup the PyQTGraph realtime particle plot
         self._view_scatter = pg.PlotWidget(title=title, labels=labels)
         self._view_scatter.show()
         self._scatter_x = pg.ScatterPlotItem(pen=xpen, symbol=symbol, size=size)
@@ -657,6 +661,8 @@ class PyRfqUtils(object):
         self._view_scatter.addItem(self._scatter_y)
 
     def plot_particles(self, factor=1, beamlist=None):
+        # Plot the particles X and Y positions vs Z
+        # Call me every time step
         if beamlist == None:
             beamlist = self._beam
 
@@ -677,29 +683,11 @@ class PyRfqUtils(object):
         return self._view_scatter
 
 
-    # NOTE does not classify based on species yet!!!!!
-    def write_particle_data(self, step_num, rate=5, beamlist=None):
-        if beamlist==None:
-            beamlist = self._beam
-      
-        if top.it == 1:
-            date = datetime.datetime.today()
-            filename = date.strftime('%Y-%m-%dT%H:%M') + "_particle_data.hdf5"
-            self._particle_data_file = h5py.File(filename, 'w')
-            self._particle_data_group = self._particle_data_file.create_group("particle_data")
-        
-        elif top.it%rate != 0:
-            return
-
-        x = self._get_all_x_part(beamlist)
-        y = self._get_all_y_part(beamlist)
-        z = self._get_all_z_part(beamlist)
-
-        particles = list(zip(x, y, z))
-        # grp = self._particle_data_group.create_dataset(str(step_num), np.shape(particles), data=particles, dtype=np.double)
-
-
     def write_hdf5_data(self, step_num, beamlist=None):
+        # Write out the particle data to hdf5 file
+        # step_num refers to top.it
+        # Beamlist is a list of the WARP beam objects that the user wants data outputted for
+        # Used in SERIAL 
         if beamlist == None:
             beamlist = self._beam
 
@@ -709,6 +697,12 @@ class PyRfqUtils(object):
             self._particle_outfile = h5py.File(filename, 'w')
             self._particle_outfile.attrs.__setitem__('PY_RFQ_HELPER', b'0.0.1')
             self._data_out_called = True
+
+            # Store data to identify species later
+            beam_identifier_list = self._particle_outfile.create_group('SpeciesList')
+            for beam in beamlist:
+                beam_identifier_list.create_dataset(beam.name, data=[beam.sm, beam.charge])
+
 
         step_str = "Step#{}".format(step_num)
 
@@ -742,7 +736,12 @@ class PyRfqUtils(object):
         for key in _part_data:
             step_grp.create_dataset(key, data=_part_data[key])
 
+
     def write_hdf5_data_p(self, step_num, beamlist=None):
+        # Write out the particle data to hdf5 file
+        # step_num refers to top.it
+        # Beamlist is a list of the WARP beam objects that the user wants data outputted for
+        # Used in PARALLEL
         if beamlist == None:
             beamlist = self._beam
 
@@ -756,32 +755,52 @@ class PyRfqUtils(object):
                 self._particle_outfile.attrs.__setitem__('PY_RFQ_HELPER', b'0.0.1')
                 self._data_out_called = True
 
+                # Store data to identify species later
+                beam_identifier_list = self._particle_outfile.create_group('SpeciesList')
+                for beam in beamlist:
+                    # MASS, CHARGE
+                    beam_identifier_list.create_dataset(beam.name, data=[beam.mass, beam.charge])
+
+
         step_str = "Step#{}".format(step_num)
 
         _part_data = {'x': [], 'y': [], 'z': [], 'px': [], 'py': [], 'pz': [], 'm': [], 'q': [], "ENERGY": [],
-                      'vx': [], 'vy': [], 'vz': [], 'ux': [], 'uy': [], 'uz': [], 'xp': [], 'yp': []}
+                      'vx': [], 'vy': [], 'vz': []}
 
         for beam in beamlist:
-            _npart = beam.getn()
-            _mass = beam.sm
+            
+            x_gathered = comm.gather(beam.xp, root=0)
+            y_gathered = comm.gather(beam.yp, root=0)
+            z_gathered = comm.gather(beam.zp, root=0)
+            vx_gathered = comm.gather(beam.uxp, root=0)
+            vy_gathered = comm.gather(beam.uyp, root=0)
+            vz_gathered = comm.gather(beam.uzp, root=0)
 
-            _part_data['x'] = np.concatenate((_part_data['x'], beam.getx())) 
-            _part_data['y'] = np.concatenate((_part_data['y'], beam.gety())) 
-            _part_data['z'] = np.concatenate((_part_data['z'], beam.getz())) 
-            _part_data['px'] = np.concatenate((_part_data['px'], beam.getux() * _mass)) 
-            _part_data['py'] = np.concatenate((_part_data['py'], beam.getuy() * _mass)) 
-            _part_data['pz'] = np.concatenate((_part_data['pz'], beam.getuz() * _mass))  
-            _part_data['m'] = np.concatenate((_part_data['m'], np.full(_npart, _mass)))
-            _part_data['q'] = np.concatenate((_part_data['q'], np.full(_npart, beam.charge)))
-            _part_data['ENERGY'] = np.concatenate((_part_data['ENERGY'], np.full(_npart, beam.ekin)))
-            _part_data['vx'] = np.concatenate((_part_data['vx'], beam.getvx()))
-            _part_data['vy'] = np.concatenate((_part_data['vy'], beam.getvy()))
-            _part_data['vz'] = np.concatenate((_part_data['vz'], beam.getvz()))
-            _part_data['ux'] = np.concatenate((_part_data['ux'], beam.getux()))
-            _part_data['uy'] = np.concatenate((_part_data['uy'], beam.getuy()))
-            _part_data['uz'] = np.concatenate((_part_data['uz'], beam.getuz()))
-            _part_data['xp'] = np.concatenate((_part_data['xp'], beam.getxp()))
-            _part_data['yp'] = np.concatenate((_part_data['yp'], beam.getyp()))
+            if (comm.Get_rank() == 0):
+                x_gathered = np.array(list(itertools.chain.from_iterable(x_gathered)))
+                y_gathered = np.array(list(itertools.chain.from_iterable(y_gathered)))
+                z_gathered = np.array(list(itertools.chain.from_iterable(z_gathered)))
+                vx_gathered = np.array(list(itertools.chain.from_iterable(vx_gathered)))
+                vy_gathered = np.array(list(itertools.chain.from_iterable(vy_gathered)))
+                vz_gathered = np.array(list(itertools.chain.from_iterable(vz_gathered)))
+                _npart = len(x_gathered)
+                _mass = beam.mass
+                # px_gathered = vx_gathered * _mass
+                # py_gathered = vy_gathered * _mass
+                # pz_gathered = vz_gathered * _mass
+
+                _part_data['x'] = np.concatenate((_part_data['x'], x_gathered))
+                _part_data['y'] = np.concatenate((_part_data['y'], y_gathered))
+                _part_data['z'] = np.concatenate((_part_data['z'], z_gathered))
+                # _part_data['px'] = np.concatenate((_part_data['px'], px_gathered)) # momenta
+                # _part_data['py'] = np.concatenate((_part_data['py'], py_gathered))
+                # _part_data['pz'] = np.concatenate((_part_data['pz'], pz_gathered)) 
+                _part_data['m'] = np.concatenate((_part_data['m'], np.full(_npart, _mass)))
+                _part_data['q'] = np.concatenate((_part_data['q'], np.full(_npart, beam.charge)))
+                _part_data['ENERGY'] = np.concatenate((_part_data['ENERGY'], np.full(_npart, beam.ekin)))
+                _part_data['vx'] = np.concatenate((_part_data['vx'], vx_gathered))
+                _part_data['vy'] = np.concatenate((_part_data['vy'], vy_gathered))
+                _part_data['vz'] = np.concatenate((_part_data['vz'], vz_gathered))
 
 
         if (comm.Get_rank() == 0):
