@@ -2,7 +2,7 @@ import numpy as np
 from scipy import constants as const
 import h5py
 import matplotlib.pyplot as plt
-from temp_particles import IonSpecies
+from .ionspecies_for_bunch import IonSpecies
 from dans_pymodules import FileDialog, ParticleDistribution
 import matplotlib.ticker as ticker
 from mpl_toolkits.axes_grid1 import make_axes_locatable

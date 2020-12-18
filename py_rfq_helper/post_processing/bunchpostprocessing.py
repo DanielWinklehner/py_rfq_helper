@@ -6,15 +6,15 @@ from scipy import constants as const
 from scipy import stats
 import h5py
 import matplotlib.pyplot as plt
-from temp_particles import IonSpecies
+from .ionspecies_for_bunch import IonSpecies
 from dans_pymodules import FileDialog, ParticleDistribution
-from bunch_particle_distribution import BunchParticleDistribution
+from .bunch_particle_distribution import BunchParticleDistribution
 import matplotlib.ticker as ticker
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import time
 import pickle
 import os
-import hdbscan  
+import hdbscan
 
 __author__ = "Jared Hwang"
 __doc__ = """Post processing utilities for bunches made using PyRFQ module"""
