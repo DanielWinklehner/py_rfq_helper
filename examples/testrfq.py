@@ -93,20 +93,20 @@ def main():
 
 
     # Initialization of basic RFQ parameters
-    VANE_RAD   = 1 * cm    # radius of vane cylinder
+    VANE_RAD   = 1.0 * cm  # radius of vane cylinder
     VANE_DIST  = 2.5 * cm  # distance of vane center to central axis
     NX, NY, NZ = 16, 16, 512
     PRWALL     = 0.04
     D_T        = 1e-9
     RF_FREQ    = 32.8e6
-    Z_START    = 0.01  #the start of the rfq
+    Z_START    = 0.01  #t he start of the rfq
     SIM_START  = -0.014
 
     setup() # Warp setup function
 
     ## Warp parameter specifications for simulation
     w3d.solvergeom = w3d.XYZgeom
-    
+
     w3d.xmmax =  PRWALL
     w3d.xmmin = -PRWALL
     w3d.nx    =  NX
@@ -129,19 +129,17 @@ def main():
 
     top.dt = D_T
 
-    # refinedsolver = MRBlock3D() # Refined mesh solver
+    # refinedsolver = MRBlock3D()  # Refined mesh solver
     # registersolver(refinedsolver)
-    solver = MultiGrid3D()    # Non-refined mesh solver
+    solver = MultiGrid3D()  # Non-refined mesh solver
     registersolver(solver)
 
     top.npinject = 50
     top.inject   = 1
     w3d.l_inj_rz = False
-    top.zinject  = SIM_START 
+    top.zinject  = SIM_START
     w3d.zmmin    = SIM_START
     top.injctspc = 1000000
-
-
 
     ## RFQ specification and declaration
     rfq = PyRFQ(filename=FIELD_FILENAME, from_cells=False, twoterm=False, boundarymethod=False)
@@ -162,7 +160,7 @@ def main():
 
     # rfq.add_endplates  = True
     # rfq.cyl_id         = 0.1
-    # rfq.grid_res_bempp = 0.005 
+    # rfq.grid_res_bempp = 0.005
     # rfq.pot_shift      = 3.0 * 22000.0
     # rfq.ignore_rms  = False
     rfq.simple_rods = True
@@ -180,7 +178,7 @@ def main():
     # beam.emitx = 1.8e-6  # beam x-emittance, rms edge [m-rad]
     # beam.emity = 1.8e-6  # beam y-emittance, rms edge [m-rad]
     # beam.vthz  = 0.0  # axial velocity spread [m/s ec]
-    
+
     # # Beam centroid and envelope initial conditions
 
     # twiss_emitx = 1.8e-6 /6
@@ -233,7 +231,7 @@ def main():
     proton_beam = Species(type=Proton, charge_state=+1, name="P", color=red)
 
     top.ainject = 0.05
-    top.binject = 0.05 
+    top.binject = 0.05
     h2_beam.ibeam = h2_current
     proton_beam.ibeam = proton_current
     h2_beam.ekin = 15.*kV
@@ -263,7 +261,7 @@ def main():
             nump = h2_per_step
             w3d.npgrp = nump
             gchange('Setpwork3d')
-            
+
             idx = np.random.choice(np.arange(len(h2_list)), h2_per_step, replace=False)
             h2_inject = h2_list[idx]
             _, _, h2_x, h2_vx, h2_y, h2_vy, h2_z, h2_vz = list(zip(*h2_inject))
@@ -344,7 +342,7 @@ def main():
     #                                         refinement=[4,4,4])
 
     # # Mesh refinement for the center of the beam
-    # childmesh = refinedsolver.addchild(mins=[-VANE_DIST+VANE_RAD, -VANE_DIST+VANE_RAD, SIM_START], 
+    # childmesh = refinedsolver.addchild(mins=[-VANE_DIST+VANE_RAD, -VANE_DIST+VANE_RAD, SIM_START],
     #                                    maxs=[ VANE_DIST-VANE_RAD,  VANE_DIST-VANE_RAD, w3d.zmmax],
     #                                    refinement=[4,4,4])
     #########################################
@@ -354,7 +352,7 @@ def main():
     package("w3d")
     generate()
 
-    # WARP built in plotting 
+    # WARP built in plotting
     # @callfromafterstep
     # def makeplots():
     #     if top.it > 19900:
@@ -367,23 +365,23 @@ def main():
     #             # pzxedges(color='blue')
     #             # pzyedges(color='red')
     #             # fma()
-    #             # refresh() 
+    #             # refresh()
 
     ################################# PyQTGraph RMS plotting
-    # # PyQtgraph setup
-    # app = pg.mkQApp()
+    # PyQtgraph setup
+    app = pg.mkQApp()
 
-    # # Setup the rms plot
-    # utils.rms_plot_setup(title="X and Y RMS (twice rms) vs Z", labels={'left':('X, Y', 'm'), 'bottom':('Z', 'm')}, 
-    #                      xrange=[-0.1, 1.6], yrange=[-0.015, 0.015])
+    # Setup the rms plot
+    utils.rms_plot_setup(title="X and Y RMS (twice rms) vs Z", labels={'left':('X, Y', 'm'), 'bottom':('Z', 'm')},
+                         xrange=[-0.1, 1.6], yrange=[-0.015, 0.015])
 
-    # ## setup the particle plots. Not recommended, slows down simulation immensely    
+    # ## setup the particle plots. Not recommended, slows down simulation immensely
     # # utils.particle_plot_setup(title="X and Y Particles vs Z", labels={'left':('X, Y', 'm'), 'bottom':('Z', 'm')})
 
-    # @callfromafterstep
-    # def plotpyqt():
-    #     if top.it%2 == 1:
-    #         utils.plot_rms()
+    @callfromafterstep
+    def plotpyqt():
+        if top.it%2 == 1:
+            utils.plot_rms()
 
     STEP_NUM = 2000
     PARTICLE_OUTPUT_STARTSTEP = 1800
@@ -399,10 +397,10 @@ def main():
     starttime = time.time()
     step(STEP_NUM)
     hcp()
-    endtime = time.time()  
+    endtime = time.time()
     print("Elapsed time for simulation: {} seconds".format(endtime-starttime))
-        
-    # bunch = utils.find_bunch_p(h2_beam, max_steps=10000)
+
+    # bunch = utils.find_bunch_p(h2_beam, max_steps=1000)
 
 
 if __name__ == '__main__':

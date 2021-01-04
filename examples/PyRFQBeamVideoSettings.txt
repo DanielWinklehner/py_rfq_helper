@@ -8,10 +8,10 @@ OVERLAID : 0
 THREED   : 0
 
 # Simulation step at which to start video
-STARTSTEP: 1811
+STARTSTEP: 1820
 
 # Interval between successive steps to plot (if data is only saved every 2nd step, stepinterval would be 2x)
-STEPINTERVAL: 10
+STEPINTERVAL: 2
 
 ZMIN     : -0.014
 ZMAX     : 1.4
@@ -30,7 +30,7 @@ YSCALE   : 0.01
 YUNITS   : cm
 
 # Steps divided by step interval
-FRAMES   : 100
+FRAMES   : 90
 
 FIGSIZEX : 20
 FIGSIZEY : 8

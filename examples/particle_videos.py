@@ -76,7 +76,7 @@ def catalogue_data(f, num_species=-1):
                 data_dict[key][keyname]['y'] = y[idx]
                 data_dict[key][keyname]['z'] = z[idx]
                 i += 1
-    
+
     data_dict['SpeciesIdList'] = sorted(list(f['SpeciesList'].keys()))
 
 
@@ -97,7 +97,7 @@ def side_by_side_plot(data, start_step=0, step_interval=1, zlim=(-0.1,2),vert_li
     fig = plt.figure(figsize=figsize)
     ax1 = fig.add_subplot(211, xlim=zlim, ylim=vert_lim)
     ax2 = fig.add_subplot(212, xlim=zlim, ylim=vert_lim)
-    
+
     # Axes scalers
     ticks_y = ticker.FuncFormatter(lambda x, pos: '{0:g}'.format(x/yscale))
     ax1.yaxis.set_major_formatter(ticks_y)
@@ -118,7 +118,7 @@ def side_by_side_plot(data, start_step=0, step_interval=1, zlim=(-0.1,2),vert_li
 
     step_list = [item[5:] for item in list(data.keys())]
     step_list.remove('esIdList')
-    step_list_int = np.array([int(elem) for elem in step_list]) 
+    step_list_int = np.array([int(elem) for elem in step_list])
     # ensure start_step has data
     if (start_step not in step_list_int):
         if (start_step < step_list_int.min()):
@@ -139,7 +139,7 @@ def side_by_side_plot(data, start_step=0, step_interval=1, zlim=(-0.1,2),vert_li
         ax1.set_ylim(vert_lim)
         ax2.set_xlim(zlim)
         ax2.set_ylim(vert_lim)
-        return plot_array 
+        return plot_array
 
     # Plots a frame of the animation
     def animate(i):
@@ -205,7 +205,7 @@ def overlaid_plot(data, zlim=(-0.1,2),vert_lim=(-0.01,0.01),
             step_str = "Step#" + str(i)
             x_part, y_part, z_part = list(data[step_str]['x']), \
                                      list(data[step_str]['y']), \
-                                     list(data[step_str]['z']), 
+                                     list(data[step_str]['z']),
             particlesx.set_data(z_part, x_part)
             particlesy.set_data(z_part, y_part)
 
@@ -225,7 +225,7 @@ def make_3d_plot(data, species, start_step=0, step_interval=1, zlim=(-0.1,2),ver
                       yscale=1e-2, yunits='cm', frames=2000, figsize=(20,10), fps=30):
     # makes 3d plot of the beam using the same rules as the side_by_side plot
 
-    from mpl_toolkits.mplot3d import Axes3D 
+    from mpl_toolkits.mplot3d import Axes3D
     print("Making 3d video plot")
 
     fig = plt.figure(figsize=figsize)
@@ -258,7 +258,7 @@ def make_3d_plot(data, species, start_step=0, step_interval=1, zlim=(-0.1,2),ver
 
     step_list = [item[5:] for item in list(data.keys())]
     step_list.remove('esIdList')
-    step_list_int = np.array([int(elem) for elem in step_list]) 
+    step_list_int = np.array([int(elem) for elem in step_list])
     # ensure start_step has data
     if (start_step not in step_list_int):
         if (start_step < step_list_int.min()):
@@ -350,11 +350,14 @@ def main():
     # Video and plot settings are contained in file called PyRFQPlotSettings.txt for now
     with open('PyRFQBeamVideoSettings.txt') as fp:
         lines = fp.readlines()
-
+        print(lines)
     # Extract value from settings list
     floatregex = '[-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?' # courtesy of https://www.regular-expressions.info/floatingpoint.html
     for line in lines:
-        line = line.replace('\n', '')
+        line = line.strip()
+        if line == "":
+            continue
+        # line = line.replace('\n', '')
         if line[0] == '#':
             continue
         elif 'DARKMODE' in line:
@@ -369,30 +372,30 @@ def main():
             step_interval = int(re.search(floatregex, line).group())
         elif 'ZMIN' in line:
             zmin = float(re.search(floatregex, line).group())
-        elif 'ZMAX' in line: 
+        elif 'ZMAX' in line:
             zmax = float(re.search(floatregex, line).group())
-        elif 'VERTMIN' in line: 
+        elif 'VERTMIN' in line:
             vertmin = float(re.search(floatregex, line).group())
-        elif 'VERTMAX' in line: 
+        elif 'VERTMAX' in line:
             vertmax = float(re.search(floatregex, line).group())
-        elif 'POINTSIZE' in line: 
+        elif 'POINTSIZE' in line:
             pointsize = float(re.search(floatregex, line).group())
-        elif 'XCOLOR' in line: 
+        elif 'XCOLOR' in line:
             xcolor = line.replace(' ', '')
             xcolor = xcolor.replace('XCOLOR:', '')
-        elif 'YCOLOR' in line: 
+        elif 'YCOLOR' in line:
             ycolor = line.replace(' ', '')
             ycolor = ycolor.replace('YCOLOR:', '')
-        elif 'YSCALE' in line: 
+        elif 'YSCALE' in line:
             yscale = float(re.search(floatregex, line).group())
-        elif 'YUNITS' in line: 
+        elif 'YUNITS' in line:
             yunits = line.replace(' ', '')
             yunits = yunits.replace('YUNITS:', '')
-        elif 'FRAMES' in line: 
+        elif 'FRAMES' in line:
             frames = int(re.search(floatregex, line).group())
-        elif 'FIGSIZEX' in line: 
+        elif 'FIGSIZEX' in line:
             figsizex = int(re.search(floatregex, line).group())
-        elif 'FIGSIZEY' in line: 
+        elif 'FIGSIZEY' in line:
             figsizey = int(re.search(floatregex, line).group())
         elif 'NUMSPECIES' in line:
             num_species = int(re.search(floatregex, line).group())
@@ -408,7 +411,7 @@ def main():
                          start_step=startstep, step_interval=step_interval, zlim=(zmin,zmax),vert_lim=(vertmin,vertmax),
                          point_size=pointsize, xcolor=xcolor, ycolor=ycolor,
                          yscale=yscale, yunits=yunits, frames=frames, figsize=(figsizex, figsizey), num_species=num_species, fps=fps)
-    endtime = time.time()  
+    endtime = time.time()
 
     print("Elapsed time for animating: {} seconds".format(endtime-starttime))
 
