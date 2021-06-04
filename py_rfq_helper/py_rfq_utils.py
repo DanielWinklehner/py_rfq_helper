@@ -1,9 +1,9 @@
 # py_rfq_utils.py
 # Written by Jared Hwang in August 2018
-# 
-# Contains the PyRfqUtils class designed to work in tandem with the RFQ object from 
+#
+# Contains the PyRfqUtils class designed to work in tandem with the RFQ object from
 # the py_rfq_module (py_rfq_designer), and a corresponding WARP simulation.
-# 
+#
 
 from warp import *
 import numpy as np
@@ -28,7 +28,7 @@ colors = MyColors()
 
 class PyRfqUtils(object):
 
-    def __init__(self, rfq, beam=[]): 
+    def __init__(self, rfq, beam=[]):
 
         self._velocity_calculated = False
         self._zclose = rfq._field._zmax
@@ -54,7 +54,7 @@ class PyRfqUtils(object):
         self._x_top_rms = None
         self._x_bottom_rms = None
         self._y_top_rms = None
-        self._y_bottom_rms = None       
+        self._y_bottom_rms = None
 
         self._view_scatter = None
         self._scatter_x = None
@@ -123,22 +123,22 @@ class PyRfqUtils(object):
                 self._wavelengthbound = self._zfar
                 print('_wavelengthbound: {}'.format(self._wavelengthbound))
                 return
-        
+
         elif self._velocity_calculated:
-        
+
             print("self._zclose: {}  self._zfar: {}".format(self._zclose, self._zfar))
             z_positions = [elem for elem in bunch_beam.getz() if (self._zclose < elem < self._zfar)]
             print("Restul: {},  Desired:  {}".format(np.around(np.mean(z_positions), decimals=3), np.around((self._zfar + self._zclose) / 2, decimals=3)))
 
             if (np.around(np.mean(z_positions), decimals=3) == (np.around(((self._zfar - self._zclose) / 2) + self._zclose, decimals=3))):
                 self._bunchfound = True
-                    
+
                 for beam in self._beam:
 
                     step_zdata = beam.getz()
                     bunchparticles_indices = np.where(np.logical_and(step_zdata>(self._zclose), step_zdata<(self._zfar)))
                     self._bunch_particles[beam.name] = {}
-                    
+
                     self._bunch_particles[beam.name]["x"] = beam.getx()[bunchparticles_indices]
                     self._bunch_particles[beam.name]["y"] = beam.gety()[bunchparticles_indices]
                     self._bunch_particles[beam.name]["z"] = beam.getz()[bunchparticles_indices]
@@ -220,12 +220,12 @@ class PyRfqUtils(object):
                 self._wavelengthbound = self._zfar
                 print('_wavelengthbound: {}'.format(self._wavelengthbound))
                 return
-        
+
         elif self._velocity_calculated:
 
             tot_particles = list(zip(bunch_beam.getx(), bunch_beam.gety(), bunch_beam.getz()))
             #tot_particles = np.array(tot_particles)
-            
+
             print("self._zclose: {}  self._zfar: {}".format(self._zclose, self._zfar))
             particles = [item for item in tot_particles if (self._zclose < item[2] < self._zfar)]
             z_positions = [item[2] for item in particles]
@@ -234,11 +234,11 @@ class PyRfqUtils(object):
 
             if (np.around(np.mean(z_positions), decimals=3) == (np.around(((self._zfar - self._zclose) / 2) + self._zclose, decimals=3))):
                 self._bunchfound = True
-                    
+
                 for beam in self._beam:
                     bunchparticles_indices = beam.selectparticles(zl=self._zclose, zu=self._zfar)
                     self._bunch_particles[beam.name] = {}
-                    
+
                     self._bunch_particles[beam.name]["x"] = beam.getx()[bunchparticles_indices]
                     self._bunch_particles[beam.name]["y"] = beam.gety()[bunchparticles_indices]
                     self._bunch_particles[beam.name]["z"] = beam.getz()[bunchparticles_indices]
@@ -285,7 +285,7 @@ class PyRfqUtils(object):
         plg([w3d.xmmin,w3d.xmmax],[self._rfq._field._zmax, self._rfq._field._zmax], color=red)
 
         if (self._wavelengthbound):
-            plg([w3d.xmmin,w3d.xmmax],[self._wavelengthbound, self._wavelengthbound], color=red)   
+            plg([w3d.xmmin,w3d.xmmax],[self._wavelengthbound, self._wavelengthbound], color=red)
 
 
         self._rfq._conductors.draw()
@@ -308,9 +308,9 @@ class PyRfqUtils(object):
 
 
         if (self._wavelengthbound):
-            plg([w3d.ymmin,w3d.ymmax],[self._wavelengthbound, self._wavelengthbound], color=red)   
+            plg([w3d.ymmin,w3d.ymmax],[self._wavelengthbound, self._wavelengthbound], color=red)
 
-        
+
         self._rfq._conductors.draw()
         # pfzy(plotsg=0, cond=0, titles=False, view=view)
 
@@ -337,7 +337,7 @@ class PyRfqUtils(object):
         plsys(view)
         for beam in beamlist:
             beam.ppyp()
-    
+
     def beamplots(self, beamlist=None):
 
         if beamlist==None:
@@ -373,7 +373,7 @@ class PyRfqUtils(object):
             self.beamplots(beamlist=beamlist)
 
     # def plot_rms_graph(self, start, end, bucketsize=0.001):
-    
+
     #     beam = self._beam
 
     #     x = beam.getx()
@@ -534,7 +534,7 @@ class PyRfqUtils(object):
         else:
             return name
 
-    def plot_xedges(self, plot_item_top, plot_item_bottom, pen=(200,200,200), symbol=None, symbolPen=(200,200,200), symbolBrush=(50,50,150), fillLevel=None, 
+    def plot_xedges(self, plot_item_top, plot_item_bottom, pen=(200,200,200), symbol=None, symbolPen=(200,200,200), symbolBrush=(50,50,150), fillLevel=None,
                     brush=None, js=-1, zoffset=None,zscale=1.,scale=1., titleb=None,titles=1):
         """Plots beam X edges (centroid +- twice X rms) versus Z
         - symbol: A string describing the shape of symbols to use for each point. Optionally, this may also be a sequence of strings with a different symbol for each point.
@@ -555,7 +555,7 @@ class PyRfqUtils(object):
         varsuffix = None
         ff = None
 
-        if zscale == 0.: 
+        if zscale == 0.:
             raise Exception("zscale must be nonzero")
 
         if titleb is None:
@@ -581,7 +581,7 @@ class PyRfqUtils(object):
         #             # gettitler(js))
 
     #   pzxedges: Plots beam X edges (centroid +- twice Xrms) versus Z
-    def plot_yedges(self, plot_item_top, plot_item_bottom, pen=(200,200,200), symbol=None, symbolPen=(200,200,200), symbolBrush=(50,50,150), fillLevel=None, 
+    def plot_yedges(self, plot_item_top, plot_item_bottom, pen=(200,200,200), symbol=None, symbolPen=(200,200,200), symbolBrush=(50,50,150), fillLevel=None,
                     brush=None, js=-1, zoffset=None,zscale=1.,scale=1., titleb=None,titles=1):
         """Plots beam X edges (centroid +- twice X rms) versus Z
         - symbol: A string describing the shape of symbols to use for each point. Optionally, this may also be a sequence of strings with a different symbol for each point.
@@ -631,7 +631,7 @@ class PyRfqUtils(object):
         self._x_top_rms = pg.PlotDataItem(pen=xpen)
         self._x_bottom_rms = pg.PlotDataItem(pen=xpen)
         self._y_top_rms = pg.PlotDataItem(pen=ypen)
-        self._y_bottom_rms = pg.PlotDataItem(pen=ypen)       
+        self._y_bottom_rms = pg.PlotDataItem(pen=ypen)
         self._view.setRange(xRange=xrange, yRange=yrange)
         self._view.addItem(self._x_top_rms)
         self._view.addItem(self._x_bottom_rms)
@@ -682,12 +682,11 @@ class PyRfqUtils(object):
     def get_particle_widget(self):
         return self._view_scatter
 
-
     def write_hdf5_data(self, step_num, beamlist=None):
         # Write out the particle data to hdf5 file
         # step_num refers to top.it
         # Beamlist is a list of the WARP beam objects that the user wants data outputted for
-        # Used in SERIAL 
+        # Used in SERIAL
         if beamlist == None:
             beamlist = self._beam
 
@@ -703,11 +702,14 @@ class PyRfqUtils(object):
             for beam in beamlist:
                 beam_identifier_list.create_dataset(beam.name, data=[beam.sm, beam.charge, beam.charge_state, beam.type.A, beam.type.Z])
 
-
         step_str = "Step#{}".format(step_num)
 
-        _part_data = {'x': [], 'y': [], 'z': [], 'px': [], 'py': [], 'pz': [], 'm': [], 'q': [], "ENERGY": [],
-                      'vx': [], 'vy': [], 'vz': [], 'ux': [], 'uy': [], 'uz': [], 'xp': [], 'yp': []}
+        _part_data = {'x': [], 'y': [], 'z': [],
+                      'px': [], 'py': [], 'pz': [],
+                      'm': [], 'q': [], "ENERGY": [],
+                      'vx': [], 'vy': [], 'vz': [],
+                      'ux': [], 'uy': [], 'uz': [],
+                      'xp': [], 'yp': [], 'id': []}
 
         step_grp = self._particle_outfile.create_group(step_str)
 
@@ -715,12 +717,12 @@ class PyRfqUtils(object):
             _npart = beam.getn()
             _mass = beam.sm
 
-            _part_data['x'] = np.concatenate((_part_data['x'], beam.getx())) 
-            _part_data['y'] = np.concatenate((_part_data['y'], beam.gety())) 
-            _part_data['z'] = np.concatenate((_part_data['z'], beam.getz())) 
-            _part_data['px'] = np.concatenate((_part_data['px'], beam.getux() * _mass)) 
-            _part_data['py'] = np.concatenate((_part_data['py'], beam.getuy() * _mass)) 
-            _part_data['pz'] = np.concatenate((_part_data['pz'], beam.getuz() * _mass))  
+            _part_data['x'] = np.concatenate((_part_data['x'], beam.getx()))
+            _part_data['y'] = np.concatenate((_part_data['y'], beam.gety()))
+            _part_data['z'] = np.concatenate((_part_data['z'], beam.getz()))
+            _part_data['px'] = np.concatenate((_part_data['px'], beam.getux() * _mass))
+            _part_data['py'] = np.concatenate((_part_data['py'], beam.getuy() * _mass))
+            _part_data['pz'] = np.concatenate((_part_data['pz'], beam.getuz() * _mass))
             _part_data['m'] = np.concatenate((_part_data['m'], np.full(_npart, _mass)))
             _part_data['q'] = np.concatenate((_part_data['q'], np.full(_npart, beam.charge)))
             _part_data['ENERGY'] = np.concatenate((_part_data['ENERGY'], np.full(_npart, beam.ekin)))
@@ -732,6 +734,7 @@ class PyRfqUtils(object):
             _part_data['uz'] = np.concatenate((_part_data['uz'], beam.getuz()))
             _part_data['xp'] = np.concatenate((_part_data['xp'], beam.getxp()))
             _part_data['yp'] = np.concatenate((_part_data['yp'], beam.getyp()))
+            _part_data['id'] = np.concatenate((_part_data['id'], beam.getssn()))
 
         for key in _part_data:
             step_grp.create_dataset(key, data=_part_data[key])
@@ -765,16 +768,17 @@ class PyRfqUtils(object):
         step_str = "Step#{}".format(step_num)
 
         _part_data = {'x': [], 'y': [], 'z': [], 'px': [], 'py': [], 'pz': [], 'm': [], 'q': [], "ENERGY": [],
-                      'vx': [], 'vy': [], 'vz': []}
+                      'vx': [], 'vy': [], 'vz': [], 'id': []}
 
         for beam in beamlist:
-            
+
             x_gathered = comm.gather(beam.xp, root=0)
             y_gathered = comm.gather(beam.yp, root=0)
             z_gathered = comm.gather(beam.zp, root=0)
             vx_gathered = comm.gather(beam.uxp, root=0)
             vy_gathered = comm.gather(beam.uyp, root=0)
             vz_gathered = comm.gather(beam.uzp, root=0)
+            id_gathered = comm.gather(beam.ssn, root=0)
 
             if (comm.Get_rank() == 0):
                 x_gathered = np.array(list(itertools.chain.from_iterable(x_gathered)))
@@ -783,6 +787,7 @@ class PyRfqUtils(object):
                 vx_gathered = np.array(list(itertools.chain.from_iterable(vx_gathered)))
                 vy_gathered = np.array(list(itertools.chain.from_iterable(vy_gathered)))
                 vz_gathered = np.array(list(itertools.chain.from_iterable(vz_gathered)))
+                id_gathered = np.array(list(itertools.chain.from_iterable(id_gathered)))
                 _npart = len(x_gathered)
                 _mass = beam.mass
                 px_gathered = vx_gathered * _mass
@@ -794,14 +799,14 @@ class PyRfqUtils(object):
                 _part_data['z'] = np.concatenate((_part_data['z'], z_gathered))
                 _part_data['px'] = np.concatenate((_part_data['px'], px_gathered)) # momenta
                 _part_data['py'] = np.concatenate((_part_data['py'], py_gathered))
-                _part_data['pz'] = np.concatenate((_part_data['pz'], pz_gathered)) 
+                _part_data['pz'] = np.concatenate((_part_data['pz'], pz_gathered))
                 _part_data['m'] = np.concatenate((_part_data['m'], np.full(_npart, _mass)))
                 _part_data['q'] = np.concatenate((_part_data['q'], np.full(_npart, beam.charge)))
                 _part_data['ENERGY'] = np.concatenate((_part_data['ENERGY'], np.full(_npart, beam.ekin)))
                 _part_data['vx'] = np.concatenate((_part_data['vx'], vx_gathered))
                 _part_data['vy'] = np.concatenate((_part_data['vy'], vy_gathered))
                 _part_data['vz'] = np.concatenate((_part_data['vz'], vz_gathered))
-
+                _part_data['id'] = np.concatenate((_part_data['id'], id_gathered))
 
         if (comm.Get_rank() == 0):
             step_grp = self._particle_outfile.create_group(step_str)

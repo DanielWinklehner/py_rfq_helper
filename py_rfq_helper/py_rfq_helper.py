@@ -1,13 +1,13 @@
 # RFQ class. Contains parameters and guidelines to create an RFQ in an already
 # existent warp simulation. Contains an instance of a FieldLoader class from field.py.
-# 
-# Usage: create an instance of an RFQ with the filename of either cell parameters 
+#
+# Usage: create an instance of an RFQ with the filename of either cell parameters
 #        or field data, and a boolean to indicate if the file contains the former
-#        or the latter. 
-#        User must also instantiate the values "vane_distance" (vane distance 
+#        or the latter.
+#        User must also instantiate the values "vane_distance" (vane distance
 #        from axis), and rf_freq (frequency field modulation in Hz). If the bool
 #        simple_rods is set, the user must instantiate the value "vane_radius" to
-#        be the radius of the rod vanes. 
+#        be the radius of the rod vanes.
 #        The values "zstart" (start of the rfq), "sim_start" (start of the
 #        simulation, and "sim_end_buffer" (extra room beyond the rfq) can be set
 #        if necessary, and are otherwise instantiated at 0.0.
@@ -79,7 +79,7 @@ class RFQ(object):
         self._sim_end = self._field._zmax + self.sim_end_buffer
 
         self.import_field()
-        
+
         self.create_vanes()
 
     def setup(self):
@@ -117,12 +117,13 @@ class RFQ(object):
                     print("Please set potential shift (pot_shift) for boundary method.")
                     exit(1)
 
+        top.ssnpid = nextpid()  # This ensures that WARP assigns a unique ID (ssn) to each particle
         self.tt_frequency = self.rf_freq
 
 
         if self._from_cells:
             if (self._twoterm):
-                self._field.load_field_from_cells_tt(self.tt_voltage, 
+                self._field.load_field_from_cells_tt(self.tt_voltage,
                                                   self.tt_frequency,
                                                   self.tt_a_init,
                                                   self.xy_limits,
@@ -147,20 +148,20 @@ class RFQ(object):
             self._ray.append(val)
             return val
 
-        egrd = addnewegrddataset(ex=self._field._ex, 
+        egrd = addnewegrddataset(ex=self._field._ex,
                          ey=self._field._ey,
                          ez=self._field._ez,
                          dx=self._field._dx,
                          dy=self._field._dy,
                          zlength=self._field._z_length)
-        
+
         print("=====================================")
         print("xmin: " + str(self._field._xmin))
         print("ymin {}".format(self._field._ymin))
         print("nx {} ny {} nz {}".format(self._field._nx,self._field._ny,self._field._nz))
         print("dx {} dy {} dz {}".format(self._field._dx,self._field._dy,self._field._dz))
         print("======================================")
-        
+
         addnewegrd(id=egrd, zs=0, xs=self._field._xmin, ys=self._field._ymin, ze=self._field._z_length, func=fieldscaling)
 
 
@@ -183,13 +184,13 @@ class RFQ(object):
         outer_shell = ZCylinderOut(self.vane_distance + 0.05, (self._sim_end - self.sim_start), zcent=(self._sim_end + self.sim_start)/2)
 
         rod1 = ZCylinder(self.vane_radius, length, zcent=zcent, xcent=self.vane_distance)
-        rod2 = ZCylinder(self.vane_radius, length, zcent=zcent, xcent=-self.vane_distance) 
+        rod2 = ZCylinder(self.vane_radius, length, zcent=zcent, xcent=-self.vane_distance)
         rod3 = ZCylinder(self.vane_radius, length, zcent=zcent, ycent=self.vane_distance)
         rod4 = ZCylinder(self.vane_radius, length, zcent=zcent, ycent=-self.vane_distance)
 
 
         total_conductors = outer_shell + rod1 + rod2 + rod3 + rod4
-       
+
         installconductor(total_conductors)
         scraper = ParticleScraper(total_conductors)
 
@@ -209,12 +210,12 @@ class RFQ(object):
         plotegrd(component="y", iy=self._field._ny, ix=self._field._nx)
         fma()
 
-        
+
         # plotegrd(component="x", iz=50)
         # fma()
         #plotegrd(component="y", iz=50)
         #fma()
-    
+
     def add_cell(self,
                  cell_type,
                  aperture,
