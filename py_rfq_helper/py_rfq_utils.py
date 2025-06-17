@@ -646,7 +646,7 @@ class PyRfqUtils(object):
         self.plot_xedges(self._x_top_rms, self._x_bottom_rms)
         self.plot_yedges(self._y_top_rms, self._y_bottom_rms)
 
-        QtGui.QApplication.processEvents()
+        QtGui.QGuiApplication.processEvents()
 
 
     def particle_plot_setup(self, xpen=pg.mkPen(width=1, color=colors[6]), ypen=pg.mkPen(width=1, color=colors[5]),
@@ -674,7 +674,7 @@ class PyRfqUtils(object):
         factored_y_by_z = sample(y_by_z_particles, int(len(y_by_z_particles)*factor))
         self._scatter_y.setData(pos=factored_y_by_z)
 
-        QtGui.QApplication.processEvents()
+        QtGui.QGuiApplication.processEvents()
 
     def get_rms_widget(self):
         return self._view
