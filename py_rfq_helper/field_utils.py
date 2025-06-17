@@ -6,7 +6,7 @@ from dans_pymodules import MyColors
 from scipy.interpolate import interp1d as interp1d
 from scipy.special import iv as bessel1
 from scipy.optimize import root
-from scipy import meshgrid
+from numpy import meshgrid
 import matplotlib.pyplot as plt
 
 
