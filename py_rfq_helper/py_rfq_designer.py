@@ -99,7 +99,7 @@ class PyRFQ(object):
         self.field_start = 0.0  # start of the ecternally generated e-field
         self.field_end = None
 
-        self.sim_start = sim_start  # start of the simulation
+        self.sim_start = sim_sta  # start of the simulation
         self.sim_end = sim_end
         self.sim_radius = sim_radius
 
