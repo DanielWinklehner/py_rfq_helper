@@ -418,7 +418,7 @@ class PyRFQ(object):
             print(z)
             print(r)
 
-            tank = ZSrfrvOut(zdata=z, rofzdata=r)
+            tank = ZSrfrvOut(zdata=z, rofzdata=r, rmax=2.0 * self.sim_radius)
 
         elif self.tank_id and self.tank_sta and self.tank_end:
             tank = ZCylinderOut(0.5 * self.tank_id, self.tank_end - self.tank_sta,
