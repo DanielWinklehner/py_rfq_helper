@@ -120,7 +120,6 @@ class RFQ(object):
         top.ssnpid = nextpid()  # This ensures that WARP assigns a unique ID (ssn) to each particle
         self.tt_frequency = self.rf_freq
 
-
         if self._from_cells:
             if (self._twoterm):
                 self._field.load_field_from_cells_tt(self.tt_voltage,

@@ -74,6 +74,7 @@ def load_from_ibsimu(filename):
                                  vz=vz[species_indices]
                                  ))
 
+
         # plt.scatter(x[species_indices], y[species_indices], s=0.5)
         # plt.show()
         # plt.scatter(x[species_indices], vx[species_indices]/vz[species_indices], s=0.5)

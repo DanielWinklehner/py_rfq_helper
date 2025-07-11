@@ -75,7 +75,6 @@ except ImportError:
 # --- Try importing pythonocc-core
 HAVE_OCC = False
 try:
-
     from OCC.Extend.DataExchange import read_stl_file
     from OCC.Display.SimpleGui import init_display
     from OCC.Core.BRepPrimAPI import BRepPrimAPI_MakeBox, BRepPrimAPI_MakeTorus, BRepPrimAPI_MakeSweep
@@ -95,17 +94,18 @@ try:
     from OCC.Core.TColgp import TColgp_HArray1OfPnt2d, TColgp_Array1OfPnt2d
     from OCCUtils.Common import *
 
-    from py_electrodes import ElectrodeObject
+    from py_electrodes.py_electrodes import PyElectrode
 
     HAVE_OCC = True
 
-except ImportError:
+except ImportError as e:
 
-    ElectrodeObject = None
+    PyElectrode = None
     print("Something went wrong during OCC import. No CAD support possible!")
+    print("Exception was {}".format(e))
 
 USE_MULTIPROC = True  # In case we are not using mpi or only using 1 processor, fall back on multiprocessing
-GMSH_EXE = "/home/daniel/src/gmsh-4.0.6-Linux64/bin/gmsh"
+GMSH_EXE = "/home/daniel/src/gmsh-4.0.0-Linux64/bin/gmsh"
 # GMSH_EXE = "E:/gmsh4/gmsh.exe"
 HAVE_TEMP_FOLDER = False
 np.set_printoptions(threshold=10000)
@@ -1077,9 +1077,9 @@ RefineMesh;
             tmp_dir = self._parent.temp_dir
             brep_fn = os.path.join(tmp_dir, "{}.brep".format(self._name))
 
-            self._occ_obj = ElectrodeObject()
-            self._occ_obj.load_from_brep(brep_fn)
-            self._occ_obj.partition_z(self._occ_npart)
+            self._occ_obj = PyElectrode()
+            self._occ_obj.generate_from_file(brep_fn)
+            # self._occ_obj.partition_z(self._occ_npart)
 
             return 0
 
@@ -2425,9 +2425,52 @@ class PyRFQ(object):
             dirichlet_fun.plot()
 
         # Solve BEMPP problem only on 1 cpu (has internal multiprocessing)
+        # TODO: How to free the other CPU's for BEMPP if we run with mpirun?
         if RANK == 0:
             slp = bempp.api.operators.boundary.laplace.single_layer(dp0_space, dp0_space, dp0_space)
+
             neumann_fun, info = bempp.api.linalg.gmres(slp, dirichlet_fun, tol=1e-6, use_strong_form=True)
+
+            local_coordinates = np.array([[1. / 3], [1. / 3]])
+            grid = neumann_fun.space.grid
+
+            xc = []
+            yc = []
+            zc = []
+
+            xc2 = []
+            yc2 = []
+            zc2 = []
+
+            maxfield = 0.0
+
+            for element in grid.leaf_view.entity_iterator(0):
+                xc.append(np.sum(element.geometry.corners[0, :]) / 3.0)
+                yc.append(np.sum(element.geometry.corners[1, :]) / 3.0)
+                zc.append(np.sum(element.geometry.corners[2, :]) / 3.0)
+                if 0.02 < zc[-1] < 0.03 and np.abs(xc[-1]) < 0.04 and np.abs(yc[-1]) < 0.04:
+                    xc2.append(xc[-1])
+                    yc2.append(yc[-1])
+                    zc2.append(zc[-1])
+                    if np.abs(neumann_fun.evaluate(element, local_coordinates)[0][0]) > maxfield:
+                        maxfield = np.abs(neumann_fun.evaluate(element, local_coordinates)[0][0])
+                        maxc = [xc[-1], yc[-1], zc[-1]]
+
+            print("\nMaximum surface E-Field Es = {:.4f} MV/m".format(1e-6 * maxfield))
+            a = 0.01
+            m = 3.0
+            r_0 = 0.5 * (a + a * m)
+            print("\nMaximum from scaling law Es = {:.4f} MV/m, "
+                  "corresponding to kappa = {:.4f}".format(1e-6 * 22000 / r_0,
+                                                           maxfield / 22000 * r_0))
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+            ax.scatter(xc, yc, zc, c="blue", s=1.0)
+            ax.scatter(xc2, yc2, zc2, c="orange", s=4.0)
+            ax.scatter([maxc[0]], [maxc[1]], [maxc[2]], c="red", s=16.0)
+            plt.show()
+            # neumann_fun.plot()
+
             mpi_data = {"n_coeff": neumann_fun.coefficients,
                         "info": info}
         else:
@@ -3152,8 +3195,7 @@ End Sub
         return 0
 
 
-if __name__ == "__main__":
-
+def run_case1():
     mydebug = False
     myfn = "PARMTEQOUT_mod.TXT"
 
@@ -3336,3 +3378,37 @@ if __name__ == "__main__":
     #     pickle.dump(myrfq._variables_bempp["ef_itp"], outfile)
 
     # myrfq.plot_vane_profile()
+
+
+def run_single_cell():
+    mydebug = True
+    r_vane = 0.005
+    h_vane = 0.05
+    nz = 750
+    grid_res = 0.001
+
+    myrfq = PyRFQ(voltage=22000.0, fudge_vanes=True, debug=mydebug)
+    myrfq.append_cell(cell_type="regular",
+                      a=0.01,
+                      m=3.0,
+                      L=0.05)
+
+    myrfq.set_bempp_parameter("reverse_mesh", True)
+    myrfq.set_bempp_parameter("grid_res", grid_res)  # characteristic mesh size during initial meshing
+    myrfq.set_bempp_parameter("refine_steps", 0)  # number of times gmsh is called to "refine by splitting"
+
+    myrfq.set_geometry_parameter("vane_radius", r_vane)
+    myrfq.set_geometry_parameter("vane_height", h_vane)
+    myrfq.set_geometry_parameter("vane_height_type", 'absolute')
+    myrfq.set_geometry_parameter("nz", nz)
+
+    myrfq.initialize()
+    myrfq.generate_geo_str()
+    myrfq.generate_gmsh_files()
+    myrfq.generate_full_mesh()
+    myrfq.solve_bempp()
+
+
+if __name__ == "__main__":
+    # run_case1()
+    run_single_cell()

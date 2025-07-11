@@ -356,7 +356,14 @@ class BunchPostProcessor(object):
         ax2.set_xlabel("Phase " + '(' + zunits + ')')
 
         labels_no_noise = hdb_labels[np.where(hdb_labels >= 0)]
-        biggest_cluster = stats.mode(labels_no_noise)[0][0]
+
+        mode, count = stats.mode(labels_no_noise)
+        if not isinstance(mode, np.ndarray):
+            biggest_cluster = mode
+        else:
+            biggest_cluster = mode[0]
+
+        # biggest_cluster = stats.mode(labels_no_noise)[0][0]
 
         for k, col in zip(hdb_unique_labels, hdb_colors):
             if k == -1:
@@ -391,9 +398,15 @@ class BunchPostProcessor(object):
         print("Num clusters found: {}".format(np.max(hdb_labels)+1))
   
         labels_no_noise = hdb_labels[np.where(hdb_labels >= 0)]
-        # TODO #
-        biggest_cluster = stats.mode(labels_no_noise)[0][0]  # assumes the main bunch is the cluster with the most 
-                                                             # particles. Apply better restriction later???
+        # TODO
+        mode, count = stats.mode(labels_no_noise)
+        if not isinstance(mode, np.ndarray):
+            biggest_cluster = mode
+        else:
+            biggest_cluster = mode[0]
+
+        # biggest_cluster = stats.mode(labels_no_noise)[0][0]  # assumes the main bunch is the cluster with the most
+                                                               # particles. Apply better restriction later???
 
         cluster_indices = np.array(list(range(0, len(hdb_labels))))[hdb_labels == biggest_cluster]
         non_cluster_indices = np.array(list(range(0, len(hdb_labels))))[hdb_labels != biggest_cluster]
