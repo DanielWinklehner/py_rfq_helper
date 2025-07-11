@@ -370,7 +370,7 @@ class PyRFQ(object):
             exit(1)
 
         if self.simple_vanes and not self.vane_from_profile:
-            if not (self.vane_radius and self.vane_distance and self.vane_sta and self.vane_end):
+            if not (self.vane_radius and self.vane_distance and self.vane_sta is not None and self.vane_end is not None):
                 print("Please specify vane radius, distance, start, and end for the simple rod structure. Exiting.")
                 exit(1)
 
