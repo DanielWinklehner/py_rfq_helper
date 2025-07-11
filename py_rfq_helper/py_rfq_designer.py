@@ -362,7 +362,7 @@ class PyRFQ(object):
         # Evaluates user parameters to ensure all dependencies are provided
         # Calculates and/or loads the field into the field class
 
-        if not self._filename:
+        if not self.filename:
             print("Please provide a field file. Exiting")
             exit(1)
         if not self.rf_freq:
@@ -376,7 +376,7 @@ class PyRFQ(object):
 
         self.create_vanes()
 
-        self._field.load_field_from_file(self._filename)
+        self._field.load_field_from_file(self.filename)
 
 
     def install_field(self):
