@@ -411,8 +411,8 @@ class PyRFQ(object):
 
         # Variations of the tank:
         if self.tank_from_data:
-            z = self.tank_data[:, 1]
-            r = self.tank_data[:, 0]
+            z = self.tank_data[:, 0]
+            r = self.tank_data[:, 1]
 
             print("Making tank from data:")
             print(z)
@@ -448,7 +448,7 @@ class PyRFQ(object):
             rod3 = ZCylinder(self.vane_radius, length, zcent=zcent, ycent=self.vane_distance)
             rod4 = ZCylinder(self.vane_radius, length, zcent=zcent, ycent=-self.vane_distance)
 
-            all_conds = rod1 + rod2 + rod3 + rod4
+            all_conds += rod1 + rod2 + rod3 + rod4
 
         self._conductors = all_conds
 
