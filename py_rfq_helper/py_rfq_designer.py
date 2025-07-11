@@ -413,7 +413,13 @@ class PyRFQ(object):
         if self.tank_from_data:
             z = self.tank_data[:, 1]
             r = self.tank_data[:, 0]
+
+            print("Making tank from data:")
+            print(z)
+            print(r)
+
             tank = ZSrfrvOut(zdata=z, rofzdata=r)
+
         elif self.tank_id and self.tank_sta and self.tank_end:
             tank = ZCylinderOut(0.5 * self.tank_id, self.tank_end - self.tank_sta,
                                 zcent=0.5 * (self.tank_end + self.tank_sta))
@@ -432,7 +438,9 @@ class PyRFQ(object):
         if self.vane_from_profile:
             print("Vane generation from profile not yet implemented. Exiting.")
             exit(1)
-        elif self.simple_vanes and self.vane_sta and self.vane_end and self.vane_distance and self.vane_radius:
+        elif (self.simple_vanes and
+              self.vane_sta is not None and self.vane_end is not None and
+              self.vane_distance and self.vane_radius):
             length = self.vane_end - self.vane_sta
             zcent = self.vane_sta + 0.5 * length
             rod1 = ZCylinder(self.vane_radius, length, zcent=zcent, xcent=self.vane_distance)
