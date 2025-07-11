@@ -448,7 +448,7 @@ class PyRFQ(object):
             rod3 = ZCylinder(self.vane_radius, length, zcent=zcent, ycent=self.vane_distance)
             rod4 = ZCylinder(self.vane_radius, length, zcent=zcent, ycent=-self.vane_distance)
 
-            all_conds += rod1 + rod2 + rod3 + rod4
+            all_conds = rod1 + rod2 + rod3 + rod4
 
         self._conductors = all_conds
 
