@@ -96,7 +96,7 @@ class PyRFQ(object):
         self.rfq_start = 0.0  # start of the physical rfq model
         self.rfq_end = None
 
-        self.field_start = 0.0  # start of the ecternally generated e-field
+        self.field_start = 0.0  # start of the externally generated e-field
         self.field_end = None
 
         self.sim_start = sim_sta  # start of the simulation
@@ -398,7 +398,7 @@ class PyRFQ(object):
                                  zlength=self._field._z_length)
 
         # installs the field with the scaling function fieldscaling
-        addnewegrd(id=egrd, zs=0,
+        addnewegrd(id=egrd, zs=self.field_start,
                    xs=self._field._xmin, ys=self._field._ymin,
                    ze=self._field._z_length, func=fieldscaling)
 
