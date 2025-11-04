@@ -130,3 +130,8 @@ examples/input
 
 # movies
 *.mp4
+
+# Other testing stuff
+/old_scripts/py_rfq_designer/py_rfq_designer/New_Theta0/
+/old_scripts/py_rfq_designer/py_rfq_designer/Old_Theta0/
+/old_scripts/py_rfq_designer/py_rfq_designer/unit_cell/output/

@@ -106,11 +106,12 @@ class PyRFQ(object):
         # Variables for RFQ conductors
         self.simple_vanes = False  # whether we want simple rods as dummy vanes
         self.vane_radius = None  # radius of simple rods (m)
+        self.vane_top_abs = None  # absolute position of the square top of vanes generated from profile (m)
         self.vane_distance = None  # vane distance from axis (m)
         self.vane_sta = None  # vane/rod start (m)
         self.vane_end = None  # vane/rod end (m)
         self.vane_from_profile = False  # whether we want to generate a series of thin slices following the vane profile
-        self.vane_profile = None  # N x 2 numpy array of x/y pairs for vane profile
+        self.vane_profile = None  # list of two N x 2 numpy array of x/y pairs for vane profile
 
         self.tank_sta = None  # start of the tank cylinder (m)
         self.tank_end = None  # end of the tank cylinder (m)
@@ -436,8 +437,43 @@ class PyRFQ(object):
 
         # Variations of the vanes/rods
         if self.vane_from_profile:
-            print("Vane generation from profile not yet implemented. Exiting.")
-            exit(1)
+            vane1_pts, vane2_pts = self.vane_profile
+            box_top = self.vane_top_abs
+            radius = self.vane_radius
+            voltage = 0.0
+
+            # Vane 1
+            for i in range(len(vane1_pts_reg) - 1):
+                zc = 0.5 * (vane1_pts[i, 0] + vane1_pts[i + 1, 0])
+                yc = 0.5 * (vane1_pts[i, 1] + vane1_pts[i + 1, 1]) + radius
+                zl = vane1_pts[i + 1, 0] - vane1_pts[i, 0]
+                box_h = box_top - yc
+
+                if i == 0:
+                    vane1_cond = ZCylinder(radius, length=zl, voltage=voltage, zcent=zc, ycent=yc)
+                else:
+                    vane1_cond += ZCylinder(radius, length=zl, voltage=voltage, zcent=zc, ycent=yc)
+                # conductors += ZCylinder(radius, length=zl, voltage=voltage, zcent=zc, ycent=-yc)
+                vane1_cond += Box(xsize=2 * radius, ysize=box_h, zsize=zl, voltage=voltage, zcent=zc,
+                                  ycent=yc + 0.5 * box_h)
+
+            # Vane 2
+            for i in range(len(vane2_pts) - 1):
+                zc = 0.5 * (vane2_pts[i, 0] + vane2_pts[i + 1, 0])
+                xc = 0.5 * (vane2_pts[i, 1] + vane2_pts[i + 1, 1]) + radius
+                zl = vane2_pts[i + 1, 0] - vane2_pts[i, 0]
+                box_h = box_top - xc
+
+                if i == 0:
+                    vane2_cond = ZCylinder(radius, length=zl, voltage=-voltage, zcent=zc, xcent=xc)
+                else:
+                    vane2_cond += ZCylinder(radius, length=zl, voltage=-voltage, zcent=zc, xcent=xc)
+                # conductors += ZCylinder(radius, length=zl, voltage=-voltage, zcent=zc, xcent=-xc)
+                vane2_cond += Box(xsize=box_h, ysize=2 * radius, zsize=zl, voltage=-voltage, zcent=zc,
+                                  xcent=xc + 0.5 * box_h)
+
+            all_conds += vane1_cond + vane2_cond
+
         elif (self.simple_vanes and
               self.vane_sta is not None and self.vane_end is not None and
               self.vane_distance and self.vane_radius):
