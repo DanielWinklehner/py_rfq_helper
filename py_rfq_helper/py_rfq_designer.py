@@ -443,7 +443,7 @@ class PyRFQ(object):
             voltage = 0.0
 
             # Vane 1
-            for i in range(len(vane1_pts_reg) - 1):
+            for i in range(len(vane1_pts) - 1):
                 zc = 0.5 * (vane1_pts[i, 0] + vane1_pts[i + 1, 0])
                 yc = 0.5 * (vane1_pts[i, 1] + vane1_pts[i + 1, 1]) + radius
                 zl = vane1_pts[i + 1, 0] - vane1_pts[i, 0]
